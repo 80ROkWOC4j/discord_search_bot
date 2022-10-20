@@ -1,76 +1,58 @@
-use std::env;
+use poise::serenity_prelude::{self as serenity, Activity};
 
-use serenity::async_trait;
-use serenity::framework::standard::macros::{command, group};
-use serenity::framework::standard::{CommandResult, StandardFramework};
-use serenity::http::Typing;
-use serenity::model::channel::Message;
-use serenity::prelude::*;
+type Error = Box<dyn std::error::Error + Send + Sync>;
+type Context<'a> = poise::Context<'a, Data, Error>;
+// User data, which is stored and accessible in all command invocations
+struct Data {}
 
-#[group]
-#[commands(search)]
-struct General;
-
-struct Handler;
-
-#[async_trait]
-impl EventHandler for Handler {}
-
-#[tokio::main]
-async fn main() {
-    let framework = StandardFramework::new()
-        .configure(|c| c.prefix("~")) // set the bot's prefix to "~"
-        .group(&GENERAL_GROUP);
-
-    // Login with a bot token from the environment
-    let token = "MTAzMjM1NDkzMTY3MzQwNzYyMA.GWDGC9.9waK6J3lcJLqMKZur8g-G7o8MWV3F5TmUlOlqo"; // env::var("DISCORD_TOKEN").expect("token");
-    let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
-    let mut client = Client::builder(token, intents)
-        .event_handler(Handler)
-        .framework(framework)
-        .await
-        .expect("Error creating client");
-
-    // start listening for events by starting a single shard
-    if let Err(why) = client.start().await {
-        println!("An error occurred while running the client: {:?}", why);
-    }
-}
-
-#[command]
-async fn search(ctx: &Context, msg: &Message) -> CommandResult {
-    let keyword = &msg.content[7..].trim();
-    if keyword.len() == 0 {
-        msg.reply(ctx, "사용법 : ~search 검색할내용").await?;
-        return Ok(());
-    }
+/// Displays your or another user's account creation date
+#[poise::command(slash_command, prefix_command)]
+async fn search(
+    ctx: Context<'_>,
+    #[description = "text to search"] text: String,
+    #[description = "검색할 최근 채팅 갯수(기본 200)"] count: Option<u64>,
+) -> Result<(), Error> {
+    ctx.discord().set_activity(Activity::playing(&text)).await;
+    let typing = serenity::Typing::start(ctx.discord().http.clone(), ctx.channel_id().0)?;
     
-    use serenity::model::gateway::Activity;
-
-    let search_start_msg = keyword.clone().to_owned() + " 검색";
-    let activity = Activity::playing(search_start_msg);
-    let channel_id = msg.channel_id;
-
-    ctx.set_activity(activity).await;
-    let typing = Typing::start(ctx.http.clone(), channel_id.0)?;
-
-    let mut result = keyword.clone().to_owned() + " 검색 결과 \n";
-
-    let _messages = channel_id
-        .messages(&ctx, |retriever| retriever.before(msg.id).limit(200))
-        .await?;
-
-    
+    let limit = match count {
+        None => 200,
+        Some(i) => i,
+    };
+    let _messages = ctx.channel_id().messages(&ctx.discord(), |retriever| retriever.limit(limit)).await?;
+    let mut result = text.clone().to_owned() + " 검색 결과 \n";
     for history in _messages {
-        if history.content.contains(keyword) {
+        if history.content.contains(&text) {
             result += &history.link();
             result += "\n";
         }
     }
 
-    Typing::stop(typing);
-    ctx.set_activity(Activity::playing("~search")).await;
-    msg.reply(ctx, result).await?;
-
+    // let u = user.as_ref().unwrap_or_else(|| ctx.author());
+    // let response = format!("{}'s account was created at {}", u.name, u.created_at());
+    ctx.say(&result).await?;
+    serenity::Typing::stop(typing);
+    ctx.discord().set_activity(Activity::playing("/search")).await;
     Ok(())
+}
+
+#[poise::command(prefix_command)]
+async fn register(ctx: Context<'_>) -> Result<(), Error> {
+    poise::builtins::register_application_commands_buttons(ctx).await?;
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    let framework = poise::Framework::builder()
+        .options(poise::FrameworkOptions {
+            commands: vec![search(), register()],
+            ..Default::default()
+        })
+        //.token(std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN"))
+        .token("MTAzMjM1NDkzMTY3MzQwNzYyMA.GWDGC9.9waK6J3lcJLqMKZur8g-G7o8MWV3F5TmUlOlqo")
+        .intents(serenity::GatewayIntents::non_privileged())
+        .user_data_setup(move |_ctx, _ready, _framework| Box::pin(async move { Ok(Data {}) }));
+
+    framework.run().await.unwrap();
 }
