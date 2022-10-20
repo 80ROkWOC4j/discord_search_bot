@@ -49,8 +49,7 @@ async fn main() {
             commands: vec![search(), register()],
             ..Default::default()
         })
-        //.token(std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN"))
-        .token("MTAzMjM1NDkzMTY3MzQwNzYyMA.GWDGC9.9waK6J3lcJLqMKZur8g-G7o8MWV3F5TmUlOlqo")
+        .token(std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN"))
         .intents(serenity::GatewayIntents::non_privileged())
         .user_data_setup(move |_ctx, _ready, _framework| Box::pin(async move { Ok(Data {}) }));
 
