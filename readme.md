@@ -11,7 +11,7 @@ docker run -d --restart=unless-stopped -e DISCORD_TOKEN="YOUR TOKEN" --name dsb 
 ```
 
 how to use
-1. invite bot. you need read msg, send msg, manage threads, use slash command permission.
+1. invite bot. you need read msg, send msg, use slash command permission.
 2. type mention bot register.  
 ```@SearchBot register```
 3. bot gonna reply with buttons. click "Register in guild" button.
@@ -19,5 +19,6 @@ how to use
 
 usage
 ```
-/search text:text_to_search count:count_of_search_messages
+/search text:text_to_search count:number_of_msg_to_scan
 ```
+then bot gonna send result to dm.

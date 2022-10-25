@@ -1,6 +1,7 @@
 use std::vec;
 
-use poise::serenity_prelude::{self as serenity, CreateButton, InteractionResponseType};
+use chrono::{DateTime, NaiveDateTime, Utc};
+use poise::serenity_prelude::{self as serenity, CreateButton, InteractionResponseType, Message};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -15,63 +16,99 @@ fn search_more_button() -> CreateButton {
     button
 }
 
+fn timestamp_to_readable(timestamp: serenity::model::Timestamp) -> String {
+    let naive = NaiveDateTime::from_timestamp(timestamp.timestamp(), 0);
+    let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
+    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
 #[poise::command(slash_command, prefix_command)]
 async fn search(
     ctx: Context<'_>,
     #[description = "text to search"] text: String,
-    #[description = "count of recent chat for search(default 200)"] count: Option<u64>,
-    #[description = "max length of shown messages(default 200)"] shown_length: Option<usize>,
+    #[description = "number of messages to scan(default : 100)"] count: Option<u64>,
 ) -> Result<(), Error> {
-    // max size of discord embed msg is 1024
-    let shown_len: usize = match shown_length {
-        None => 200,
-        Some(i) => i,
-    };
-    let limit = match count {
-        None => 200,
-        Some(i) => i,
+    // max size of discord field chr size in embed is 1024 (max embed size is 6000)
+    let shown_len: usize = 50;
+    let _count = match count {
+        Some(i) => {
+            if i > 100 {
+                i / 100
+            } else {
+                1
+            }
+        }
+        None => 1,
     };
 
-    // make a thread for send results
-    let result_msg = "Search Result of ".to_string() + &text;
-    let mut search_from = ctx.say(&result_msg).await?.into_message().await?.id;
-    let thread = ctx
-        .channel_id()
-        .create_public_thread(&ctx.discord().http, search_from, |t| t.name(&result_msg))
-        .await
-        .unwrap();
+    let channel_to_search = ctx.channel_id();
+    let dm_reply_msg = format!(
+        "Search [{}] in {}::{}",
+        &text,
+        &ctx.guild().unwrap().name,
+        &channel_to_search.name(&ctx.discord()).await.unwrap()
+    );
+    let dm = ctx
+        .author()
+        .direct_message(&ctx.discord(), |m| m.content(&dm_reply_msg))
+        .await?;
+
+    let reply = ctx
+        .send(|b| b.ephemeral(true).content("I'm sending results to dm"))
+        .await?;
+
+    let mut search_from = reply.into_message().await?.id;
 
     loop {
-        let messages = ctx
-            .channel_id()
-            .messages(&ctx.discord(), |retriever| {
-                retriever.limit(limit).before(search_from)
-            })
-            .await?;
+        let typing = serenity::Typing::start(ctx.discord().http.clone(), dm.channel_id.0)?;
+        for _ in 0.._count {
+            let messages = channel_to_search
+                .messages(&ctx.discord(), |retriever| {
+                    retriever.limit(100).before(search_from)
+                })
+                .await?;
 
-        if messages.len() == 0 {
-            thread.send_message(&ctx.discord(), |m| m.content("end of channel, no more chat to find!")).await?;
-            return Ok(());
-        }
+            if messages.len() == 0 {
+                ctx.author()
+                    .direct_message(&ctx.discord(), |m| {
+                        m.content("end of channel, no more chat to find!")
+                    })
+                    .await?;
+                return Ok(());
+            }
 
-        // send result
-        let typing = serenity::Typing::start(ctx.discord().http.clone(), ctx.channel_id().0)?;
-        for msg in &messages {
-            if msg.content.contains(&text) {
-                thread
-                    .send_message(&ctx.discord().http, |b| {
-                        let name = format!(
-                            "{}\t{}",
-                            &msg.author.name,
-                            &msg.timestamp.date().to_string()
-                        );
-                        let value: String;
-                        if msg.content.len() > shown_len {
-                            value = format!("[{}]({})\n", &msg.content[..shown_len], &msg.link());
-                        } else {
-                            value = format!("[{}]({})\n", &msg.content, &msg.link());
+            search_from = messages.last().unwrap().id; // for next search
+
+            let results: Vec<Message> = messages
+                .into_iter()
+                .filter(|msg| msg.content.contains(&text))
+                .collect();
+
+            // send result
+            // 10 is heuristic (msg(max shown_len 50) + author + time + etc... * 10 < 6000)
+            let chunks: Vec<&[Message]> = results.chunks(10).collect();
+            for chunk in chunks {
+                ctx.author()
+                    .direct_message(&ctx.discord().http, |b| {
+                        b.content("_ _");
+                        for msg in chunk {
+                            let name = format!(
+                                "{}\t{}",
+                                &msg.author.name,
+                                &timestamp_to_readable(msg.timestamp)
+                            );
+                            let value: String;
+                            if msg.content.chars().count() > shown_len {
+                                let tmp: Vec<char> = msg.content.chars().take(shown_len).collect();
+                                let con: String = tmp.iter().collect();
+                                value =
+                                    format!("[{}]({})\n", &con, &msg.link());
+                            } else {
+                                value = format!("[{}]({})\n", &msg.content, &msg.link());
+                            }
+                            b.add_embed(|e| e.field(&name, &value, false));
                         }
-                        b.embed(|e| e.field(&name, &value, false))
+                        b
                     })
                     .await?;
             }
@@ -79,14 +116,14 @@ async fn search(
         serenity::Typing::stop(typing).unwrap();
 
         // create search more button
-        let button_msg = thread
-            .send_message(&ctx.discord().http, |b| {
+        let button_msg = ctx
+            .author()
+            .direct_message(&ctx.discord().http, |b| {
                 b.components(|c| c.create_action_row(|row| row.add_button(search_more_button())))
             })
             .await?;
 
-        // wait for 60 sec
-        // todo : add wait_sec arg
+        // wait user's button click for 60 sec
         let interaction = match button_msg
             .await_component_interaction(&ctx.discord())
             .timeout(std::time::Duration::from_secs(60))
@@ -94,7 +131,9 @@ async fn search(
         {
             Some(x) => x,
             None => {
-                button_msg.reply(&ctx.discord(), "Search end").await?;
+                button_msg
+                    .reply(&ctx.discord(), dm_reply_msg + " : Search session end")
+                    .await?;
                 return Ok(());
             }
         };
@@ -107,9 +146,7 @@ async fn search(
             .await
             .unwrap();
 
-        // todo : disable after button clicked
-
-        search_from = messages.last().unwrap().id;
+        // todo : disable button after click
     }
 }
 
