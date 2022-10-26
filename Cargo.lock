@@ -277,7 +277,7 @@ dependencies = [
 
 [[package]]
 name = "discord_search_bot"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
  "poise",

@@ -22,14 +22,22 @@ fn timestamp_to_readable(timestamp: serenity::model::Timestamp) -> String {
     datetime.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
+fn substr(content: String, n: usize) -> String {
+    if content.chars().count() <= n {
+        return content;
+    }
+
+    let tmp: Vec<char> = content.chars().take(n).collect();
+    let s: String = tmp.iter().collect();
+    s
+}
+
 #[poise::command(slash_command, prefix_command)]
 async fn search(
     ctx: Context<'_>,
     #[description = "text to search"] text: String,
     #[description = "number of messages to scan(default : 100)"] count: Option<u64>,
 ) -> Result<(), Error> {
-    // max size of discord field chr size in embed is 1024 (max embed size is 6000)
-    let shown_len: usize = 50;
     let _count = match count {
         Some(i) => {
             if i > 100 {
@@ -54,7 +62,7 @@ async fn search(
         .await?;
 
     let reply = ctx
-        .send(|b| b.ephemeral(true).content("I'm sending results to dm"))
+        .send(|b| b.ephemeral(true).content("I'm sending results to dm!"))
         .await?;
 
     let mut search_from = reply.into_message().await?.id;
@@ -85,7 +93,8 @@ async fn search(
                 .collect();
 
             // send result
-            // 10 is heuristic (msg(max shown_len 50) + author + time + etc... * 10 < 6000)
+            // max size of discord embed field is 1024 (max embed size is 6000)
+            // 10 is heuristic (msg(max 50) + author + time + etc... * 10 < 6000)
             let chunks: Vec<&[Message]> = results.chunks(10).collect();
             for chunk in chunks {
                 ctx.author()
@@ -97,15 +106,11 @@ async fn search(
                                 &msg.author.name,
                                 &timestamp_to_readable(msg.timestamp)
                             );
-                            let value: String;
-                            if msg.content.chars().count() > shown_len {
-                                let tmp: Vec<char> = msg.content.chars().take(shown_len).collect();
-                                let con: String = tmp.iter().collect();
-                                value =
-                                    format!("[{}]({})\n", &con, &msg.link());
-                            } else {
-                                value = format!("[{}]({})\n", &msg.content, &msg.link());
-                            }
+                            let value = format!(
+                                "[{}]({})\n",
+                                &substr(msg.content.clone(), 50),
+                                &msg.link()
+                            );
                             b.add_embed(|e| e.field(&name, &value, false));
                         }
                         b
@@ -138,6 +143,7 @@ async fn search(
             }
         };
 
+        // todo : disable button after click
         interaction
             .create_interaction_response(&ctx.discord(), |r| {
                 r.kind(InteractionResponseType::UpdateMessage)
@@ -145,8 +151,6 @@ async fn search(
             })
             .await
             .unwrap();
-
-        // todo : disable button after click
     }
 }
 

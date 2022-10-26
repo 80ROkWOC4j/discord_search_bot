@@ -1,3 +1,7 @@
+Unlike Discord's default search, this bot search every messages that "contains" a keyword.  
+한글 검색을 제대로 못하는 디스코드 기본 검색 기능과 달리 이 봇은 키워드를 포함한 모든 메세지를 검색합니다.  
+
+
 invite bot or run it your self  
 https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=19327372288&scope=bot
 
