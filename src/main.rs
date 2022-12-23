@@ -17,7 +17,7 @@ fn search_more_button() -> CreateButton {
 }
 
 fn timestamp_to_readable(timestamp: serenity::model::Timestamp) -> String {
-    let naive = NaiveDateTime::from_timestamp(timestamp.timestamp(), 0);
+    let naive = NaiveDateTime::from_timestamp_opt(timestamp.timestamp(), 0).unwrap();
     let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
     datetime.format("%Y-%m-%d %H:%M:%S").to_string()
 }
@@ -70,7 +70,8 @@ async fn search(
         .await?;
 
     loop {
-        let typing_indicator = serenity::Typing::start(ctx.discord().http.clone(), dm.channel_id.0)?;
+        let typing_indicator =
+            serenity::Typing::start(ctx.discord().http.clone(), dm.channel_id.0)?;
         let fist_msg = last_msg.clone();
 
         for _ in 0.._count {
@@ -103,7 +104,7 @@ async fn search(
             for chunk in chunks {
                 ctx.author()
                     .direct_message(&ctx.discord().http, |b| {
-                        b.content("_ _");
+                        // b.content("_ _");
                         for msg in chunk {
                             let name = format!(
                                 "{}\t{}",
@@ -148,10 +149,20 @@ async fn search(
             .timeout(std::time::Duration::from_secs(60))
             .await
         {
-            Some(x) => x.channel_id.delete_message(&ctx.discord(), button_msg.id).await?,
+            Some(x) => {
+                x.channel_id
+                    .delete_message(&ctx.discord(), button_msg.id)
+                    .await?
+            }
             None => {
+                ctx.author()
+                    .direct_message(&ctx.discord(), |m| {
+                        m.content(dm_reply_msg + " : Search session end")
+                    })
+                    .await?;
                 button_msg
-                    .reply(&ctx.discord(), dm_reply_msg + " : Search session end")
+                    .channel_id
+                    .delete_message(&ctx.discord(), button_msg.id)
                     .await?;
                 return Ok(());
             }
