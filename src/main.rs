@@ -1,7 +1,7 @@
 use std::vec;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use poise::serenity_prelude::{self as serenity, CreateButton, InteractionResponseType, Message};
+use poise::serenity_prelude::{self as serenity, CreateButton, Message};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, Data, Error>;
@@ -36,17 +36,19 @@ fn substr(content: String, n: usize) -> String {
 async fn search(
     ctx: Context<'_>,
     #[description = "text to search"] text: String,
-    #[description = "number of messages to scan(default : 100)"] count: Option<u64>,
+    #[description = "number of messages to scan(default : 1000)"] count: Option<u64>,
 ) -> Result<(), Error> {
+    // 기본 검색 메세지는 1000, api 제한상 100개 단위로 검색하여 기본 _count는 10
+    const SEARCH_LIMIT: u64 = 100;
     let _count = match count {
         Some(i) => {
-            if i > 100 {
-                i / 100
+            if i > SEARCH_LIMIT {
+                i / SEARCH_LIMIT
             } else {
                 1
             }
         }
-        None => 1,
+        None => 10,
     };
 
     let channel_to_search = ctx.channel_id();
@@ -61,18 +63,20 @@ async fn search(
         .direct_message(&ctx.discord(), |m| m.content(&dm_reply_msg))
         .await?;
 
-    let reply = ctx
+    let mut last_msg = ctx
         .send(|b| b.ephemeral(true).content("I'm sending results to dm!"))
+        .await?
+        .into_message()
         .await?;
 
-    let mut search_from = reply.into_message().await?.id;
-
     loop {
-        let typing = serenity::Typing::start(ctx.discord().http.clone(), dm.channel_id.0)?;
+        let typing_indicator = serenity::Typing::start(ctx.discord().http.clone(), dm.channel_id.0)?;
+        let fist_msg = last_msg.clone();
+
         for _ in 0.._count {
             let messages = channel_to_search
                 .messages(&ctx.discord(), |retriever| {
-                    retriever.limit(100).before(search_from)
+                    retriever.limit(SEARCH_LIMIT).before(last_msg.id)
                 })
                 .await?;
 
@@ -85,7 +89,7 @@ async fn search(
                 return Ok(());
             }
 
-            search_from = messages.last().unwrap().id; // for next search
+            last_msg = messages.last().unwrap().clone(); // for next search
 
             let results: Vec<Message> = messages
                 .into_iter()
@@ -118,7 +122,17 @@ async fn search(
                     .await?;
             }
         }
-        serenity::Typing::stop(typing).unwrap();
+        serenity::Typing::stop(typing_indicator).unwrap();
+
+        ctx.author()
+            .direct_message(&ctx.discord(), |b| {
+                b.content(format!(
+                    "Search result from {} ~ {}",
+                    &timestamp_to_readable(last_msg.timestamp),
+                    &timestamp_to_readable(fist_msg.timestamp)
+                ))
+            })
+            .await?;
 
         // create search more button
         let button_msg = ctx
@@ -129,12 +143,12 @@ async fn search(
             .await?;
 
         // wait user's button click for 60 sec
-        let interaction = match button_msg
+        match button_msg
             .await_component_interaction(&ctx.discord())
             .timeout(std::time::Duration::from_secs(60))
             .await
         {
-            Some(x) => x,
+            Some(x) => x.channel_id.delete_message(&ctx.discord(), button_msg.id).await?,
             None => {
                 button_msg
                     .reply(&ctx.discord(), dm_reply_msg + " : Search session end")
@@ -142,15 +156,6 @@ async fn search(
                 return Ok(());
             }
         };
-
-        // todo : disable button after click
-        interaction
-            .create_interaction_response(&ctx.discord(), |r| {
-                r.kind(InteractionResponseType::UpdateMessage)
-                    .interaction_response_data(|d| d)
-            })
-            .await
-            .unwrap();
     }
 }
 

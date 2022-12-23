@@ -1,4 +1,4 @@
-FROM rust as build_image
+FROM rust:1.66.0 as build_image
 
 COPY . .
 RUN cargo build --release
