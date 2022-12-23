@@ -11,7 +11,7 @@ how to run
 git clone https://github.com/80ROkWOC4j/discord_search_bot.git
 cd discord_search_bot
 docker build -t discord_search_bot .
-docker run -d --restart=unless-stopped -e DISCORD_TOKEN="YOUR TOKEN" --name dsb discord_search_bot
+docker run -d --restart=unless-stopped -e DISCORD_TOKEN="YOUR_TOKEN" --name dsb discord_search_bot
 ```
 
 how to use
