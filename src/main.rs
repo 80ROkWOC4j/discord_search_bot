@@ -36,21 +36,16 @@ fn substr(content: String, n: usize) -> String {
 async fn search(
     ctx: Context<'_>,
     #[description = "text to search"] text: String,
-    #[description = "number of messages to scan(default : 1000)"] count: Option<u64>,
+    #[description = "search until find something. false by default and search latest 1000 messages."] search_until_find: Option<bool>,
 ) -> Result<(), Error> {
-    // 기본 검색 메세지는 1000, api 제한상 100개 단위로 검색하여 기본 _count는 10
-    const SEARCH_LIMIT: u64 = 100;
-    let _count = match count {
-        Some(i) => {
-            if i > SEARCH_LIMIT {
-                i / SEARCH_LIMIT
-            } else {
-                1
-            }
-        }
-        None => 10,
+    const SEARCH_MESSAGE_LIMIT: u64 = 100; // discord api limit
+    const SEARCH_COUNT: u64 = 10;  // search 10 times, so search latest 1000 messages
+    let _search_until_find = match search_until_find {
+        Some(b) => b,
+        None => false,
     };
 
+    // TODO : send results to thread for multiple search
     let channel_to_search = ctx.channel_id();
     let dm_reply_msg = format!(
         "Search [{}] in {}::{}",
@@ -72,12 +67,13 @@ async fn search(
     loop {
         let typing_indicator =
             serenity::Typing::start(ctx.discord().http.clone(), dm.channel_id.0)?;
-        let fist_msg = last_msg.clone();
+        let first_msg = last_msg.clone();
 
-        for _ in 0.._count {
+        let mut _count = 0;
+        loop {
             let messages = channel_to_search
                 .messages(&ctx.discord(), |retriever| {
-                    retriever.limit(SEARCH_LIMIT).before(last_msg.id)
+                    retriever.limit(SEARCH_MESSAGE_LIMIT).before(last_msg.id)
                 })
                 .await?;
 
@@ -92,6 +88,7 @@ async fn search(
 
             last_msg = messages.last().unwrap().clone(); // for next search
 
+            // TODO : change search algorithm
             let results: Vec<Message> = messages
                 .into_iter()
                 .filter(|msg| msg.content.contains(&text))
@@ -104,7 +101,6 @@ async fn search(
             for chunk in chunks {
                 ctx.author()
                     .direct_message(&ctx.discord().http, |b| {
-                        // b.content("_ _");
                         for msg in chunk {
                             let name = format!(
                                 "{}\t{}",
@@ -122,16 +118,31 @@ async fn search(
                     })
                     .await?;
             }
+
+            // stop search when find something and _search_until_find flag is true
+            if _search_until_find {
+                if results.len() == 0 {
+                    continue;
+                } else {
+                    break;
+                }
+            }
+            // or search until _count == SEARCH_COUNT
+            _count += 1;
+            if _count == SEARCH_COUNT {
+                break;
+            }
         }
         serenity::Typing::stop(typing_indicator).unwrap();
 
-        ctx.author()
+        let _footer = format!(
+            "Search result from {} ~ {}",
+            &timestamp_to_readable(last_msg.timestamp),
+            &timestamp_to_readable(first_msg.timestamp)
+        );
+        let mut footer_message = ctx.author()
             .direct_message(&ctx.discord(), |b| {
-                b.content(format!(
-                    "Search result from {} ~ {}",
-                    &timestamp_to_readable(last_msg.timestamp),
-                    &timestamp_to_readable(fist_msg.timestamp)
-                ))
+                b.content(_footer.clone())
             })
             .await?;
 
@@ -149,21 +160,14 @@ async fn search(
             .timeout(std::time::Duration::from_secs(60))
             .await
         {
-            Some(x) => {
-                x.channel_id
-                    .delete_message(&ctx.discord(), button_msg.id)
-                    .await?
+            Some(_) => {
+                button_msg.delete(&ctx.discord()).await?;
             }
             None => {
-                ctx.author()
-                    .direct_message(&ctx.discord(), |m| {
-                        m.content(dm_reply_msg + " : Search session end")
-                    })
-                    .await?;
-                button_msg
-                    .channel_id
-                    .delete_message(&ctx.discord(), button_msg.id)
-                    .await?;
+                button_msg.delete(&ctx.discord()).await?;
+                footer_message.edit(&ctx.discord(), |m| {
+                    m.content(_footer + "\nSearch session end")
+                }).await?;
                 return Ok(());
             }
         };

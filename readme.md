@@ -23,6 +23,6 @@ docker run -d --restart=unless-stopped -e DISCORD_TOKEN="YOUR_TOKEN" --name dsb 
 
 # Usage
 ```
-/search text:text_to_search count:number_of_msg_to_scan
+/search text:text_to_search search_until_find:True or False
 ```
 Bot gonna send result to dm.
