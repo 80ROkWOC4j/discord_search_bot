@@ -3,7 +3,7 @@ Unlike Discord's default search, this bot search every messages that "contains" 
 
 
 Invite bot or run it your self.  
-https://discord.com/api/oauth2/authorize?client_id=1032354931673407620&permissions=2147503104&scope=bot
+https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=19327372288&scope=bot
 
 
 # How to run
@@ -15,7 +15,7 @@ docker run -d --restart=unless-stopped -e DISCORD_TOKEN="YOUR_TOKEN" --name dsb 
 ```
 
 # How to setup
-1. Invite bot. you need ```2147503104``` permission.
+1. Invite bot. you need read msg, send msg, use slash command permission.
 2. Type mention bot register.  
 ```@SearchBot register```
 3. Bot gonna reply with buttons. click "Register in guild" button.

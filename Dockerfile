@@ -4,7 +4,7 @@ COPY . .
 RUN cargo build --release
 
 
-FROM debian:buster-slim
+FROM debian:stable-20230612-slim
 
 COPY --from=build_image ./target/release/discord_search_bot .
 
