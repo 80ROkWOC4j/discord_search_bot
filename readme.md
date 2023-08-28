@@ -12,7 +12,7 @@ https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=1
 git clone https://github.com/80ROkWOC4j/discord_search_bot.git
 cd discord_search_bot
 ```
-2. Add your bot token in `docker-compose.yml`
+2. Specify the discord token in your environment variable `DISCORD_TOKEN` or put it in `DISCORD_TOKEN` in `docker-compose.yml`
 3. Run
 ```
 docker-compose up -d --build

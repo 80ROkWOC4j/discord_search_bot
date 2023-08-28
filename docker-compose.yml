@@ -7,5 +7,5 @@ services:
     image: discord_search_bot
     container_name: dsb
     environment:
-      - DISCORD_TOKEN=YOUR_TOKEN
+      - DISCORD_TOKEN=$DISCORD_TOKEN
     restart: unless-stopped
