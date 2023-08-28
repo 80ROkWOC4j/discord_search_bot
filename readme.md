@@ -7,11 +7,15 @@ https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=1
 
 
 # How to run
+1. Clone
 ```
 git clone https://github.com/80ROkWOC4j/discord_search_bot.git
 cd discord_search_bot
-docker build -t discord_search_bot .
-docker run -d --restart=unless-stopped -e DISCORD_TOKEN="YOUR_TOKEN" --name dsb discord_search_bot
+```
+2. Add your bot token in `docker-compose.yml`
+3. Run
+```
+docker-compose up -d --build
 ```
 
 # How to setup

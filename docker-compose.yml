@@ -1,0 +1,11 @@
+version: '3'
+services:
+  discord_search_bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: discord_search_bot
+    container_name: dsb
+    environment:
+      - DISCORD_TOKEN=YOUR_TOKEN
+    restart: unless-stopped
