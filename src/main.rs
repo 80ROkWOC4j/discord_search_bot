@@ -2,7 +2,7 @@ use poise::serenity_prelude as serenity;
 use std::vec;
 
 mod command;
-use command::{Data, register::register, search::search};
+use command::{Data, register::register, search::search, help::help};
 
 #[tokio::main]
 async fn main() {
@@ -11,7 +11,7 @@ async fn main() {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![search(), register()],
+            commands: vec![search(), register(), help()],
             ..Default::default()
         })
         .setup(|ctx, _ready, framework| {
