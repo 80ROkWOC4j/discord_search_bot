@@ -1,11 +1,27 @@
-FROM rust:1.67.0 as build_image
+FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+WORKDIR /app
 
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this layer is cached until Cargo.toml or Cargo.lock changes
+RUN cargo chef cook --release --recipe-path recipe.json
+# Build application
 COPY . .
 RUN cargo build --release
 
+# Runtime stage
+FROM debian:bookworm-slim AS runtime
+WORKDIR /app
 
-FROM debian:stable-20230612-slim
+# Install runtime dependencies for HTTPS support
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates openssl && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY --from=build_image ./target/release/discord_search_bot .
+COPY --from=builder /app/target/release/discord_search_bot /usr/local/bin/discord_search_bot
 
-CMD [ "./discord_search_bot" ]
+CMD ["discord_search_bot"]
