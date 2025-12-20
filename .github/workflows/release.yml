@@ -6,7 +6,7 @@ permissions:
 on:
   push:
     tags:
-      - "v*" # v1.0.0, v0.5.1 등의 태그가 푸시되면 실행
+      - "*"
   workflow_dispatch: # Actions 탭에서 수동 실행 가능
 
 jobs:
