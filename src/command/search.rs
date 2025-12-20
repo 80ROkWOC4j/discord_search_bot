@@ -163,7 +163,7 @@ pub async fn search(
                 footer_message
                     .edit(
                         ctx,
-                        EditMessage::new().content(format!("{}\nSearch session end", footer)),
+                        EditMessage::new().content(format!("{footer}\nSearch session end")),
                     )
                     .await?;
                 return Ok(());

@@ -9,6 +9,6 @@ pub fn timestamp_to_readable(timestamp: serenity::Timestamp) -> String {
 pub fn substr(content: &str, n: usize) -> &str {
     match content.char_indices().nth(n) {
         Some((idx, _)) => &content[..idx],
-        None => content
+        None => content,
     }
 }

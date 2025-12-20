@@ -7,14 +7,16 @@ pub async fn register(ctx: Context<'_>) -> Result<(), Error> {
 
     let reply = poise::CreateReply::default()
         .content("Register or unregister commands?")
-        .components(vec![poise::serenity_prelude::CreateActionRow::Buttons(vec![
-            poise::serenity_prelude::CreateButton::new(&register_guild_id)
-                .label("Register in guild")
-                .style(poise::serenity_prelude::ButtonStyle::Primary),
-            poise::serenity_prelude::CreateButton::new(&unregister_guild_id)
-                .label("Unregister in guild")
-                .style(poise::serenity_prelude::ButtonStyle::Danger),
-        ])]);
+        .components(vec![poise::serenity_prelude::CreateActionRow::Buttons(
+            vec![
+                poise::serenity_prelude::CreateButton::new(&register_guild_id)
+                    .label("Register in guild")
+                    .style(poise::serenity_prelude::ButtonStyle::Primary),
+                poise::serenity_prelude::CreateButton::new(&unregister_guild_id)
+                    .label("Unregister in guild")
+                    .style(poise::serenity_prelude::ButtonStyle::Danger),
+            ],
+        )]);
 
     let sent_msg = ctx.send(reply).await?;
 
@@ -35,11 +37,16 @@ pub async fn register(ctx: Context<'_>) -> Result<(), Error> {
             mci.defer(ctx.http()).await?;
 
             let content = if mci.data.custom_id == register_guild_id {
-                poise::builtins::register_in_guild(ctx, &ctx.framework().options().commands, guild_id)
-                    .await?;
+                poise::builtins::register_in_guild(
+                    ctx,
+                    &ctx.framework().options().commands,
+                    guild_id,
+                )
+                .await?;
                 "Registered commands in guild!"
             } else {
-                poise::serenity_prelude::GuildId::set_commands(guild_id, ctx.http(), vec![]).await?;
+                poise::serenity_prelude::GuildId::set_commands(guild_id, ctx.http(), vec![])
+                    .await?;
                 "Unregistered commands in guild!"
             };
 

@@ -2,7 +2,7 @@ use poise::serenity_prelude as serenity;
 use std::vec;
 
 mod command;
-use command::{Data, register::register, search::search, help::help};
+use command::{help::help, register::register, search::search, Data};
 
 #[tokio::main]
 async fn main() {
