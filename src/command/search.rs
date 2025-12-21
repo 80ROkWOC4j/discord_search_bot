@@ -19,6 +19,7 @@ fn search_more_button() -> CreateButton {
         .style(serenity::ButtonStyle::Primary)
 }
 
+/// Search for past messages in the channel
 #[poise::command(slash_command, prefix_command)]
 pub async fn search(
     ctx: Context<'_>,
