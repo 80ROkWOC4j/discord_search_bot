@@ -2,15 +2,19 @@ use poise::serenity_prelude as serenity;
 use std::vec;
 
 mod command;
-use command::{help::help, register::register, search::search, Data};
-use crate::command::register::등록;
+use command::{help::help, register::register, register::등록, search::search, Data};
 
 #[tokio::main]
 async fn main() {
     println!("SearchBot start");
 
     let token = std::env::args().nth(1).unwrap_or_else(|| {
-        std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN and no token argument provided")
+        let key = if cfg!(debug_assertions) {
+            "DISCORD_TOKEN_DEBUG"
+        } else {
+            "DISCORD_TOKEN"
+        };
+        std::env::var(key).expect("missing DISCORD_TOKEN and no token argument provided")
     });
     let intents = serenity::GatewayIntents::non_privileged();
 
