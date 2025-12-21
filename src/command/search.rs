@@ -107,8 +107,9 @@ pub async fn search(
                             &timestamp_to_readable(msg.timestamp)
                         );
                         let value = format!("[{}]({})\n", substr(&msg.content, 50), &msg.link());
-                        msg_builder =
-                            msg_builder.add_embed(CreateEmbed::new().field(&name, &value, false));
+                        msg_builder = msg_builder
+                            .add_embed(CreateEmbed::new().field(&name, &value, false))
+                            .reference_message(&dm);
                     }
                     ctx.author().direct_message(ctx, msg_builder).await?;
                 }
