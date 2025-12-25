@@ -1,4 +1,4 @@
-use super::{Context, Error};
+use crate::{Context, Error};
 
 /// Show help information
 #[poise::command(slash_command, prefix_command)]

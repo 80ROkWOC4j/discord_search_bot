@@ -1,5 +1,4 @@
-use super::{Context, Error};
-use crate::database;
+use crate::{database, Context, Error};
 use poise::CreateReply;
 use poise::serenity_prelude::{
     self as serenity, CreateActionRow, CreateButton, CreateEmbed, CreateMessage, EditMessage,
@@ -73,15 +72,6 @@ pub async fn search(
         .await?;
 
     // === Phase 1: DB Search (Only if caching is enabled) ===
-
-    // Check Guild
-    let guild_id = match ctx.guild_id() {
-        Some(id) => id,
-        None => {
-            ctx.say("This command only works in guilds.").await?;
-            return Ok(());
-        }
-    };
     if let Some(guild_id) = ctx.guild_id()
         && caching_enabled
     {
@@ -216,10 +206,10 @@ pub async fn search(
                 last_msg_id = messages.last().unwrap().id;
 
                 // CACHING: Save fetched messages
-                if caching_enabled {
-                    if let Err(e) = database::insert_messages(pool, &messages).await {
-                        println!("Failed to cache messages: {:?}", e);
-                    }
+                if let Err(e) = database::insert_messages(pool, &messages).await
+                    && caching_enabled
+                {
+                    println!("Failed to cache messages: {e:?}");
                 }
 
                 // Filter

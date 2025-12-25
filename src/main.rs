@@ -3,89 +3,16 @@ use std::vec;
 
 mod command;
 mod database;
-use command::{config::config, help::help, search::search, Data, Error};
+mod event;
 
-async fn event_handler(
-    ctx: &serenity::Context,
-    event: &serenity::FullEvent,
-    _framework: poise::FrameworkContext<'_, Data, Error>,
-    data: &Data,
-) -> Result<(), Error> {
-    match event {
-        serenity::FullEvent::GuildCreate { guild, is_new } => {
-            let is_new = is_new.unwrap_or(false);
-            if is_new || cfg!(debug_assertions) {
-                println!(
-                    "Registering commands in guild: {} (ID: {}) (new: {})",
-                    guild.name, guild.id, is_new
-                );
-                poise::builtins::register_in_guild(
-                    ctx,
-                    &_framework.options().commands,
-                    guild.id,
-                )
-                .await?;
-            }
-        }
-        serenity::FullEvent::Message { new_message } => {
-            if new_message.author.bot {
-                return Ok(());
-            }
+use command::{config::config, help::help, search::search};
+use sqlx::SqlitePool;
 
-            if database::is_channel_caching_enabled(&data.database, new_message.channel_id)
-                .await
-                .unwrap_or(false)
-            {
-                if let Err(e) = database::insert_message(&data.database, new_message).await {
-                    println!("Failed to insert message: {:?}", e);
-                }
-            }
-        }
-        serenity::FullEvent::MessageUpdate { event, .. } => {
-            if database::is_channel_caching_enabled(&data.database, event.channel_id)
-                .await
-                .unwrap_or(false)
-            {
-                if let Err(e) = database::update_message(&data.database, event).await {
-                    println!("Failed to update message: {:?}", e);
-                }
-            }
-        }
-        serenity::FullEvent::MessageDelete {
-            channel_id,
-            deleted_message_id,
-            ..
-        } => {
-            if database::is_channel_caching_enabled(&data.database, *channel_id)
-                .await
-                .unwrap_or(false)
-            {
-                if let Err(e) = database::delete_message(&data.database, *deleted_message_id).await
-                {
-                    println!("Failed to delete message: {:?}", e);
-                }
-            }
-        }
-        serenity::FullEvent::MessageDeleteBulk {
-            channel_id,
-            multiple_deleted_messages_ids,
-            ..
-        } => {
-            if database::is_channel_caching_enabled(&data.database, *channel_id)
-                .await
-                .unwrap_or(false)
-            {
-                if let Err(e) =
-                    database::delete_messages(&data.database, multiple_deleted_messages_ids).await
-                {
-                    println!("Failed to bulk delete messages: {:?}", e);
-                }
-            }
-        }
-        _ => {}
-    }
-    Ok(())
+pub struct Data {
+    pub database: SqlitePool,
 }
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Context<'a> = poise::Context<'a, Data, Error>;
 
 #[tokio::main]
 async fn main() {
@@ -114,7 +41,7 @@ async fn main() {
         .options(poise::FrameworkOptions {
             commands: vec![search(), help(), config()],
             event_handler: |ctx, event, framework, data| {
-                Box::pin(event_handler(ctx, event, framework, data))
+                Box::pin(event::event_handler(ctx, event, framework, data))
             },
             ..Default::default()
         })

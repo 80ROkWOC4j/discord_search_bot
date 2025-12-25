@@ -1,4 +1,5 @@
-use crate::command::{Context, Error};
+use crate::{Context, Error};
+
 /// 서치봇 설정을 관리합니다.
 #[poise::command(slash_command, subcommands("caching"), guild_only)]
 pub async fn config(_ctx: Context<'_>) -> Result<(), Error> {
