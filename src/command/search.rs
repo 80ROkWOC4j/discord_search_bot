@@ -1,8 +1,11 @@
-use crate::{Context, Error, database};
+use crate::{
+    Context, Error,
+    database::{self, SearchResult},
+};
 use poise::CreateReply;
 use poise::serenity_prelude::{
     self as serenity, CreateActionRow, CreateButton, CreateEmbed, CreateMessage, EditMessage,
-    GetMessages, MessageId,
+    GetMessages, Message, MessageId,
 };
 use std::vec;
 
@@ -13,11 +16,6 @@ mod tests;
 
 use logic::{substr, timestamp_to_readable};
 
-fn search_more_button() -> CreateButton {
-    CreateButton::new("search more")
-        .label("search more")
-        .style(serenity::ButtonStyle::Primary)
-}
 const SEARCH_MESSAGE_LIMIT: u8 = 100; // discord api limit
 const SEARCH_COUNT: u64 = 10; // search 10 times, so search latest 1000 messages
 
@@ -50,11 +48,11 @@ pub async fn search(
     )
     .await?;
 
-    let dm_reply_msg = format!("Search [{}] in {}::{}", &text, &guild_name, &channel_name);
-    let dm = match ctx
-        .author()
-        .direct_message(ctx, CreateMessage::new().content(&dm_reply_msg))
-        .await
+    let dm = match send_dm(
+        ctx,
+        &format!("Search [{text}] in {guild_name}::{channel_name}"),
+    )
+    .await
     {
         Ok(msg) => msg,
         Err(_) => {
@@ -92,67 +90,28 @@ pub async fn search(
                 break;
             }
 
-            // Display DB Results
-            let mut msg_builder = CreateMessage::new();
-            for msg in &results {
-                let timestamp =
-                    serenity::Timestamp::from_unix_timestamp(msg.created_at).unwrap_or_default();
-                let name = format!(
-                    "{}\t{}",
-                    &msg.author_name,
-                    &timestamp_to_readable(timestamp)
-                );
-                let link = msg.link();
-                let value = format!("[{}]({})\n", substr(&msg.content, 50), link);
-                msg_builder = msg_builder
-                    .add_embed(CreateEmbed::new().field(&name, &value, false))
-                    .reference_message(&dm);
-            }
-            ctx.author().direct_message(ctx, msg_builder).await?;
+            send_search_results(&ctx, &dm, &results).await?;
 
             offset += results.len() as u32;
 
-            let mut button_msg = ctx
-                .author()
-                .direct_message(
-                    ctx,
-                    CreateMessage::new()
-                        .components(vec![CreateActionRow::Buttons(vec![search_more_button()])]),
-                )
-                .await?;
-
-            match button_msg
-                .await_component_interaction(ctx)
-                .timeout(std::time::Duration::from_secs(60))
-                .await
-            {
-                Some(_) => {
-                    button_msg.delete(ctx).await?;
-                    // Continue DB loop
-                }
-                None => {
-                    button_msg
-                        .edit(ctx, EditMessage::new().content("Search session end"))
-                        .await?;
-                    return Ok(());
-                }
-            }
+            if !search_more(ctx).await? {
+                return Ok(());
+            };
         }
     }
 
-    // === Phase 2: API Search (Legacy Logic + Caching) ===
-    // Determine start point
+    // === Phase 2: API Search ===
     let mut last_msg_id = if caching_enabled {
         // Try to find the earliest message in DB to avoid overlap
         database::get_earliest_message_id(pool, channel_to_search.get() as i64)
             .await?
             .map(|id| MessageId::new(id as u64))
             .unwrap_or(MessageId::new(ctx.id())) // If DB empty, start from now
+        // todo : 최근 메세지 id 말고 range 기반으로 변경
     } else {
-        MessageId::new(ctx.id()) // 
+        MessageId::new(ctx.id())
     };
 
-    let first_msg_in_session = last_msg_id;
     loop {
         {
             // Typing RAII
@@ -172,51 +131,43 @@ pub async fn search(
                     .await?;
 
                 if messages.is_empty() {
-                    ctx.author()
-                        .direct_message(
-                            ctx,
-                            CreateMessage::new().content("end of channel, no more chat to find!"),
-                        )
-                        .await?;
+                    send_dm(ctx, "end of channel, no more chat to find!").await?;
                     return Ok(());
                 }
 
                 last_msg_id = messages.last().unwrap().id;
 
-                // CACHING: Save fetched messages
-                if caching_enabled
-                    && let Some(guild_id) = ctx.guild_id()
-                    && let Err(e) =
-                        database::insert_messages(pool, &messages, guild_id.get() as i64).await
-                {
-                    println!("Failed to cache messages: {e:?}");
-                }
+                let guild_id = ctx.guild_id().map(|id| id.get() as i64).unwrap_or(0);
+                let results: Vec<SearchResult> = if caching_enabled {
+                    // 1. DB 저장
+                    if let Err(e) = database::insert_messages(pool, &messages, guild_id).await {
+                        println!("Failed to cache messages: {e:?}");
+                    }
 
-                // Filter
-                let results: Vec<serenity::Message> = messages
-                    .into_iter()
-                    .filter(|msg| msg.content.contains(&text))
-                    .collect();
+                    // 2. 방금 저장한거에서 검색어로 쿼리
+                    let max_id = messages.first().unwrap().id.get() as i64;
+                    let min_id = messages.last().unwrap().id.get() as i64;
+
+                    database::search_messages_range(
+                        pool,
+                        guild_id,
+                        channel_to_search.get() as i64,
+                        &text,
+                        min_id,
+                        max_id,
+                    )
+                    .await?
+                } else {
+                    // 캐싱 안쓰면 contains 체크
+                    messages
+                        .iter()
+                        .filter(|msg| msg.content.contains(&text))
+                        .map(|msg| SearchResult::from_message(msg, guild_id))
+                        .collect()
+                };
 
                 // send result
-                // max size of discord embed field is 1024 (max embed size is 6000)
-                // 10 is heuristic (msg(max 50) + author + time + etc... * 10 < 6000)
-                let chunks: Vec<&[serenity::Message]> = results.chunks(10).collect();
-                for chunk in chunks {
-                    let mut msg_builder = CreateMessage::new();
-                    for msg in chunk {
-                        let name = format!(
-                            "{}\t{}",
-                            &msg.author.name,
-                            &timestamp_to_readable(msg.timestamp)
-                        );
-                        let value = format!("[{}]({})\n", substr(&msg.content, 50), &msg.link());
-                        msg_builder = msg_builder
-                            .add_embed(CreateEmbed::new().field(&name, &value, false))
-                            .reference_message(&dm);
-                    }
-                    ctx.author().direct_message(ctx, msg_builder).await?;
-                }
+                send_search_results(&ctx, &dm, &results).await?;
 
                 // stop search when find something and _search_until_find flag is true
                 if search_until_find {
@@ -234,29 +185,81 @@ pub async fn search(
             }
         }
 
-        let mut button_msg = ctx
-            .author()
-            .direct_message(
-                ctx,
-                CreateMessage::new()
-                    .components(vec![CreateActionRow::Buttons(vec![search_more_button()])]),
-            )
-            .await?;
-
-        match button_msg
-            .await_component_interaction(ctx)
-            .timeout(std::time::Duration::from_secs(60))
-            .await
-        {
-            Some(_) => {
-                button_msg.delete(ctx).await?;
-            }
-            None => {
-                button_msg
-                    .edit(ctx, EditMessage::new().content("Search session end"))
-                    .await?;
-                return Ok(());
-            }
+        if !search_more(ctx).await? {
+            return Ok(());
         };
     }
+}
+
+async fn send_search_results(
+    ctx: &Context<'_>,
+    dm: &Message,
+    results: &[SearchResult],
+) -> Result<(), Error> {
+    // max size of discord embed field is 1024 (max embed size is 6000)
+    // 10 is heuristic (msg(max 50) + author + time + etc... * 10 < 6000)
+    let chunks = results.chunks(10);
+    for chunk in chunks {
+        let mut msg_builder = CreateMessage::new();
+        for msg in chunk {
+            let timestamp =
+                serenity::Timestamp::from_unix_timestamp(msg.created_at).unwrap_or_default();
+            let title = format!(
+                "{}\t{}",
+                &msg.author_name,
+                &timestamp_to_readable(timestamp)
+            );
+            let content = format!("[{}]({})\n", substr(&msg.content, 50), msg.link());
+            msg_builder = msg_builder
+                .add_embed(CreateEmbed::new().field(&title, &content, false))
+                .reference_message(dm);
+        }
+        ctx.author().direct_message(ctx, msg_builder).await?;
+    }
+    Ok(())
+}
+
+async fn search_more(ctx: Context<'_>) -> Result<bool, Error> {
+    fn search_more_button() -> CreateButton {
+        CreateButton::new("search more")
+            .label("search more")
+            .style(serenity::ButtonStyle::Primary)
+    }
+
+    let mut button_msg = ctx
+        .author()
+        .direct_message(
+            ctx,
+            CreateMessage::new()
+                .components(vec![CreateActionRow::Buttons(vec![search_more_button()])]),
+        )
+        .await?;
+
+    match button_msg
+        .await_component_interaction(ctx)
+        .timeout(std::time::Duration::from_secs(60))
+        .await
+    {
+        Some(_) => {
+            button_msg.delete(ctx).await?;
+            Ok(true)
+        }
+        None => {
+            button_msg
+                .edit(
+                    ctx,
+                    EditMessage::new()
+                        .content("Search session end")
+                        .components(vec![]),
+                )
+                .await?;
+            Ok(false)
+        }
+    }
+}
+
+async fn send_dm(ctx: Context<'_>, msg: &str) -> poise::serenity_prelude::Result<Message> {
+    ctx.author()
+        .direct_message(ctx, CreateMessage::new().content(msg))
+        .await
 }

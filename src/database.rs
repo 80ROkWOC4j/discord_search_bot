@@ -8,7 +8,7 @@ pub struct SearchResult {
     pub message_id: i64,
     pub channel_id: i64,
     pub guild_id: i64,
-    pub author_id: i64,
+    pub _author_id: i64,
     pub author_name: String,
     pub content: String,
     pub created_at: i64,
@@ -16,10 +16,23 @@ pub struct SearchResult {
 
 impl SearchResult {
     pub fn link(&self) -> String {
+        // guild id 이상하게 넣어도 잘 작동하긴 함
         format!(
             "https://discord.com/channels/{}/{}/{}",
             self.guild_id, self.channel_id, self.message_id
         )
+    }
+
+    pub fn from_message(msg: &serenity::Message, guild_id: i64) -> Self {
+        Self {
+            message_id: msg.id.get() as i64,
+            channel_id: msg.channel_id.get() as i64,
+            guild_id,
+            _author_id: msg.author.id.get() as i64,
+            author_name: msg.author.name.clone(),
+            content: msg.content.clone(),
+            created_at: msg.timestamp.timestamp(),
+        }
     }
 }
 
@@ -185,7 +198,8 @@ pub async fn delete_channel_messages(
 }
 
 // fts5 search
-pub async fn search_messages(
+#[allow(unused)]
+pub async fn search_messages_fts(
     pool: &SqlitePool,
     guild_id: i64,
     channel_id: i64,
@@ -201,7 +215,9 @@ pub async fn search_messages(
         SELECT m.message_id, m.channel_id, m.guild_id, m.author_id, m.author_name, m.content, m.created_at
         FROM messages m
         JOIN messages_fts f ON m.message_id = f.rowid
-        WHERE m.guild_id = ? AND m.channel_id = ? AND messages_fts MATCH ?
+        WHERE m.guild_id = ?
+          AND m.channel_id = ?
+          AND messages_fts MATCH ?
         ORDER BY m.created_at DESC
         LIMIT ? OFFSET ?
         "#,
@@ -230,7 +246,9 @@ pub async fn search_messages_like(
         r#"
         SELECT message_id, channel_id, guild_id, author_id, author_name, content, created_at
         FROM messages
-        WHERE guild_id = ? AND channel_id = ? AND content LIKE ?
+        WHERE guild_id = ?
+          AND channel_id = ?
+          AND content LIKE ?
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
         "#,
@@ -240,6 +258,37 @@ pub async fn search_messages_like(
     .bind(query_pattern)
     .bind(limit)
     .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
+pub async fn search_messages_range(
+    pool: &SqlitePool,
+    guild_id: i64,
+    channel_id: i64,
+    query: &str,
+    min_id: i64,
+    max_id: i64,
+) -> Result<Vec<SearchResult>, sqlx::Error> {
+    let query_pattern = format!("%{}%", query);
+
+    sqlx::query_as::<_, SearchResult>(
+        r#"
+        SELECT m.message_id, m.channel_id, m.guild_id, m.author_id, m.author_name, m.content, m.created_at
+        FROM messages m
+        WHERE m.guild_id = ? 
+          AND m.channel_id = ? 
+          AND m.message_id >= ? 
+          AND m.message_id <= ?
+          AND content LIKE ?
+        ORDER BY m.created_at DESC
+        "#,
+    )
+    .bind(guild_id)
+    .bind(channel_id)
+    .bind(min_id)
+    .bind(max_id)
+    .bind(query_pattern)
     .fetch_all(pool)
     .await
 }
