@@ -33,95 +33,8 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
         .connect_with(options)
         .await?;
 
-    // Create tables
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS config (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS messages (
-            message_id INTEGER PRIMARY KEY,
-            channel_id INTEGER NOT NULL,
-            guild_id INTEGER NOT NULL,
-            author_id INTEGER NOT NULL,
-            author_name TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at INTEGER NOT NULL
-        );
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    // Create indexes for faster search
-    sqlx::query(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_messages_channel_created 
-        ON messages (channel_id, created_at DESC);
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE INDEX IF NOT EXISTS idx_messages_guild
-        ON messages (guild_id);
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    // FTS5 Virtual Table
-    sqlx::query(
-        r#"
-        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-            content,
-            tokenize='trigram'
-        );
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    // Triggers to sync messages -> messages_fts
-    sqlx::query(
-        r#"
-        CREATE TRIGGER IF NOT EXISTS ai_messages AFTER INSERT ON messages BEGIN
-            INSERT INTO messages_fts(rowid, content) VALUES (new.message_id, new.content);
-        END;
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TRIGGER IF NOT EXISTS ad_messages AFTER DELETE ON messages BEGIN
-            DELETE FROM messages_fts WHERE rowid = old.message_id;
-        END;
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TRIGGER IF NOT EXISTS au_messages AFTER UPDATE ON messages BEGIN
-            UPDATE messages_fts SET content = new.content WHERE rowid = old.message_id;
-        END;
-        "#,
-    )
-    .execute(&pool)
-    .await?;
+    // Run migrations
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     Ok(pool)
 }
@@ -194,14 +107,15 @@ pub async fn insert_message(pool: &SqlitePool, msg: &serenity::Message) -> Resul
 pub async fn insert_messages(
     pool: &SqlitePool,
     msgs: &[serenity::Message],
+    guild_id: i64,
 ) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
     for msg in msgs {
-        let guild_id = match msg.guild_id {
-            Some(id) => id.get() as i64,
-            None => continue,
-        };
+        // let guild_id = match msg.guild_id {
+        //     Some(id) => id.get() as i64,
+        //     None => continue,
+        // };
 
         sqlx::query(
             r#"
@@ -270,7 +184,7 @@ pub async fn delete_channel_messages(
     Ok(())
 }
 
-// Search
+// fts5 search
 pub async fn search_messages(
     pool: &SqlitePool,
     guild_id: i64,
@@ -279,7 +193,8 @@ pub async fn search_messages(
     limit: u32,
     offset: u32,
 ) -> Result<Vec<SearchResult>, sqlx::Error> {
-    let query_pattern = format!("\"{}\"", query);
+    // unicode61 supports simple prefix matching with *
+    let query_pattern = format!("\"{}\"*", query);
 
     sqlx::query_as::<_, SearchResult>(
         r#"
@@ -288,6 +203,35 @@ pub async fn search_messages(
         JOIN messages_fts f ON m.message_id = f.rowid
         WHERE m.guild_id = ? AND m.channel_id = ? AND messages_fts MATCH ?
         ORDER BY m.created_at DESC
+        LIMIT ? OFFSET ?
+        "#,
+    )
+    .bind(guild_id)
+    .bind(channel_id)
+    .bind(query_pattern)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await
+}
+
+// like query
+pub async fn search_messages_like(
+    pool: &SqlitePool,
+    guild_id: i64,
+    channel_id: i64,
+    query: &str,
+    limit: u32,
+    offset: u32,
+) -> Result<Vec<SearchResult>, sqlx::Error> {
+    let query_pattern = format!("%{}%", query);
+
+    sqlx::query_as::<_, SearchResult>(
+        r#"
+        SELECT message_id, channel_id, guild_id, author_id, author_name, content, created_at
+        FROM messages
+        WHERE guild_id = ? AND channel_id = ? AND content LIKE ?
+        ORDER BY created_at DESC
         LIMIT ? OFFSET ?
         "#,
     )

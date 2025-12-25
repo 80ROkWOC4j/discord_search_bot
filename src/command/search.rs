@@ -1,4 +1,4 @@
-use crate::{database, Context, Error};
+use crate::{Context, Error, database};
 use poise::CreateReply;
 use poise::serenity_prelude::{
     self as serenity, CreateActionRow, CreateButton, CreateEmbed, CreateMessage, EditMessage,
@@ -40,14 +40,17 @@ pub async fn search(
     let guild_name = ctx
         .guild()
         .map(|g| g.name.clone())
-        .unwrap_or_else(|| "Direct Message".to_string());
-    let channel_name = channel_to_search
-        .name(ctx)
-        .await
-        .unwrap_or_else(|_| "Unknown Channel".to_string());
+        .unwrap_or("Direct Message".to_owned());
+    let channel_name = channel_to_search.name(ctx).await?;
+
+    ctx.send(
+        CreateReply::default()
+            .ephemeral(true)
+            .content("검색 결과를 dm으로 보냅니다"),
+    )
+    .await?;
 
     let dm_reply_msg = format!("Search [{}] in {}::{}", &text, &guild_name, &channel_name);
-
     let dm = match ctx
         .author()
         .direct_message(ctx, CreateMessage::new().content(&dm_reply_msg))
@@ -55,21 +58,15 @@ pub async fn search(
     {
         Ok(msg) => msg,
         Err(_) => {
-            ctx.say("I cannot send you a DM. Please enable DMs from server members.")
-                .await?;
+            ctx.send(
+                CreateReply::default()
+                    .ephemeral(true)
+                    .content("검색 결과를 DM으로 보낼 수 없습니다! 권한을 확인해주세요"),
+            )
+            .await?;
             return Ok(());
         }
     };
-
-    let mut status_msg = ctx
-        .send(
-            CreateReply::default()
-                .ephemeral(true)
-                .content("Searching... Check your DM."),
-        )
-        .await?
-        .into_message()
-        .await?;
 
     // === Phase 1: DB Search (Only if caching is enabled) ===
     if let Some(guild_id) = ctx.guild_id()
@@ -80,7 +77,7 @@ pub async fn search(
 
         loop {
             // Check if we have results in DB
-            let results = database::search_messages(
+            let results = database::search_messages_like(
                 pool,
                 guild_id.get() as i64,
                 channel_to_search.get() as i64,
@@ -91,13 +88,7 @@ pub async fn search(
             .await?;
 
             if results.is_empty() {
-                // DB exhausted, switch to API Phase
-                status_msg
-                    .edit(
-                        ctx.serenity_context(),
-                        EditMessage::new().content("Switching to API search (history backfill)..."),
-                    )
-                    .await?;
+                // try api search
                 break;
             }
 
@@ -121,17 +112,7 @@ pub async fn search(
 
             offset += results.len() as u32;
 
-            // Ask for more (DB Interaction)
-            let footer = format!(
-                "Showing cached results {} ~ {}",
-                offset - results.len() as u32 + 1,
-                offset
-            );
-            let mut footer_message = ctx
-                .author()
-                .direct_message(ctx, CreateMessage::new().content(footer.clone()))
-                .await?;
-            let button_msg = ctx
+            let mut button_msg = ctx
                 .author()
                 .direct_message(
                     ctx,
@@ -150,12 +131,8 @@ pub async fn search(
                     // Continue DB loop
                 }
                 None => {
-                    button_msg.delete(ctx).await?;
-                    footer_message
-                        .edit(
-                            ctx.serenity_context(),
-                            EditMessage::new().content(format!("{}\nSearch session end", footer)),
-                        )
+                    button_msg
+                        .edit(ctx, EditMessage::new().content("Search session end"))
                         .await?;
                     return Ok(());
                 }
@@ -184,6 +161,7 @@ pub async fn search(
 
             loop {
                 // Auto-fetch Loop
+                // 여기서 api 검색한 결과는 guild_id가 비워져서 옴
                 let messages = channel_to_search
                     .messages(
                         ctx,
@@ -206,8 +184,10 @@ pub async fn search(
                 last_msg_id = messages.last().unwrap().id;
 
                 // CACHING: Save fetched messages
-                if let Err(e) = database::insert_messages(pool, &messages).await
-                    && caching_enabled
+                if caching_enabled
+                    && let Some(guild_id) = ctx.guild_id()
+                    && let Err(e) =
+                        database::insert_messages(pool, &messages, guild_id.get() as i64).await
                 {
                     println!("Failed to cache messages: {e:?}");
                 }
@@ -254,16 +234,7 @@ pub async fn search(
             }
         }
 
-        let footer = format!(
-            "Scanned from {} ~ {}",
-            timestamp_to_readable(first_msg_in_session.created_at()),
-            timestamp_to_readable(last_msg_id.created_at())
-        );
-        let mut footer_message = ctx
-            .author()
-            .direct_message(ctx, CreateMessage::new().content(footer.clone()))
-            .await?;
-        let button_msg = ctx
+        let mut button_msg = ctx
             .author()
             .direct_message(
                 ctx,
@@ -281,12 +252,8 @@ pub async fn search(
                 button_msg.delete(ctx).await?;
             }
             None => {
-                button_msg.delete(ctx).await?;
-                footer_message
-                    .edit(
-                        ctx,
-                        EditMessage::new().content(format!("{footer}\nSearch session end")),
-                    )
+                button_msg
+                    .edit(ctx, EditMessage::new().content("Search session end"))
                     .await?;
                 return Ok(());
             }
