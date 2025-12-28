@@ -1,4 +1,15 @@
-pub mod search;
-pub mod help;
-pub mod config;
-pub mod version;
+mod search;
+mod help;
+mod config;
+mod version;
+
+use crate::{Data, Error};
+
+pub fn commands() -> Vec<poise::Command<Data, Error>> {
+    vec![
+        search::search(),
+        help::help(),
+        config::config(),
+        version::version(),
+    ]
+}

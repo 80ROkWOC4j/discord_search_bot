@@ -1,15 +1,12 @@
 use poise::serenity_prelude as serenity;
-use std::vec;
 
 mod command;
 mod database;
 mod event;
 
-use command::{config::config, help::help, search::search};
 use dashmap::DashMap;
 use poise::serenity_prelude::ChannelId;
 use sqlx::SqlitePool;
-use crate::command::version::version;
 
 pub struct Data {
     pub database: SqlitePool,
@@ -43,7 +40,7 @@ async fn main() {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![search(), help(), config(), version()],
+            commands: command::commands(),
             event_handler: |ctx, event, framework, data| {
                 Box::pin(event::event_handler(ctx, event, framework, data))
             },

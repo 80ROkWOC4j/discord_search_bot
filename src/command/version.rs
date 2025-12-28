@@ -16,7 +16,7 @@ const IMAGE_NAME: &str = "80rokwoc4j/discord_search_bot";
 
 /// Show version information
 #[poise::command(slash_command, prefix_command)]
-pub async fn version(ctx: Context<'_>) -> Result<(), Error> {
+pub(super) async fn version(ctx: Context<'_>) -> Result<(), Error> {
     let current_version = env!("CARGO_PKG_VERSION");
     let mut response = format!("현재 버전: {}\n", current_version);
 
