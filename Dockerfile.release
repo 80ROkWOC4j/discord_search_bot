@@ -1,0 +1,16 @@
+FROM debian:bookworm-slim
+
+ARG TARGETARCH
+
+# Install runtime dependencies for HTTPS support
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy the binary specific to the target architecture from the artifacts directory
+# The workflow must organize artifacts into artifacts/amd64/ and artifacts/arm64/
+COPY ./artifacts/$TARGETARCH/discord_search_bot /usr/local/bin/discord_search_bot
+
+RUN chmod +x /usr/local/bin/discord_search_bot
+
+CMD ["discord_search_bot"]

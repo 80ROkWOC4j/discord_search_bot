@@ -92,6 +92,7 @@ jobs:
 
   push_to_registry:
     name: Push Docker image to GHCR
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -99,6 +100,25 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
+
+      - name: Download Linux AMD64 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: discord_search_bot-linux-amd64
+          path: artifacts/amd64
+
+      - name: Download Linux ARM64 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: discord_search_bot-linux-arm64
+          path: artifacts/arm64
+
+      - name: Prepare artifacts for Docker
+        run: |
+          mv artifacts/amd64/discord_search_bot-linux-amd64 artifacts/amd64/discord_search_bot
+          mv artifacts/arm64/discord_search_bot-linux-arm64 artifacts/arm64/discord_search_bot
+          chmod +x artifacts/amd64/discord_search_bot
+          chmod +x artifacts/arm64/discord_search_bot
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -128,6 +148,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile.release
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}

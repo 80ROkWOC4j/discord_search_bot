@@ -19,7 +19,7 @@ WORKDIR /app
 
 # Install runtime dependencies for HTTPS support
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates openssl && \
+    apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/discord_search_bot /usr/local/bin/discord_search_bot
