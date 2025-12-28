@@ -8,4 +8,18 @@ services:
     container_name: dsb
     environment:
       - DISCORD_TOKEN=$DISCORD_TOKEN
+      - DATABASE_URL=sqlite:data/discord_bot.db?mode=rwc
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.scope=discord-search-bot-scope"
+
+  watchtower:
+    image: containrrr/watchtower
+    profiles:
+      - auto-update
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --scope discord-search-bot-scope --interval 300 --cleanup
     restart: unless-stopped
