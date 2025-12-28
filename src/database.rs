@@ -52,7 +52,111 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     Ok(pool)
 }
 
-// Config Helpers
+use std::cmp::{max, min};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Range {
+    pub start: i64,
+    pub end: i64,
+}
+
+impl Range {
+    pub fn new(start: i64, end: i64) -> Self {
+        Self {
+            start: min(start, end),
+            end: max(start, end),
+        }
+    }
+
+    pub fn touches(&self, other: &Range) -> bool {
+        max(self.start, other.start) <= min(self.end, other.end) + 1
+    }
+
+    pub fn contains(&self, other: &Range) -> bool {
+        self.start <= other.start && self.end >= other.end
+    }
+
+    // 두 range가 연속된 하나의 range로 합칠 수 있는지
+    pub fn merge(&self, other: &Range) -> Option<Range> {
+        if self.touches(other) {
+            Some(Range::new(
+                min(self.start, other.start),
+                max(self.end, other.end),
+            ))
+        } else {
+            None
+        }
+    }
+}
+
+pub fn merge_ranges(mut ranges: Vec<Range>, new_range: Range) -> Vec<Range> {
+    ranges.push(new_range);
+    ranges.sort_by_key(|r| r.start);
+
+    let mut merged: Vec<Range> = Vec::new();
+
+    for range in ranges {
+        if let Some(last) = merged.last_mut()
+            && let Some(new_merged) = last.merge(&range)
+        {
+            *last = new_merged;
+            continue;
+        }
+
+        merged.push(range);
+    }
+
+    merged
+}
+
+pub async fn add_sync_range(
+    pool: &SqlitePool,
+    channel_id: i64,
+    start: i64,
+    end: i64,
+) -> Result<Range, sqlx::Error> {
+    // transaction
+    let mut tx = pool.begin().await?;
+
+    let rows = sqlx::query(
+        "SELECT start_id, end_id FROM sync_ranges WHERE channel_id = ? ORDER BY start_id",
+    )
+    .bind(channel_id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let existing_ranges: Vec<Range> = rows
+        .iter()
+        .map(|r| Range::new(r.try_get("start_id").unwrap(), r.try_get("end_id").unwrap()))
+        .collect();
+
+    let new_range = Range::new(start, end);
+    let merged_ranges = merge_ranges(existing_ranges, new_range);
+
+    sqlx::query("DELETE FROM sync_ranges WHERE channel_id = ?")
+        .bind(channel_id)
+        .execute(&mut *tx)
+        .await?;
+
+    for r in &merged_ranges {
+        sqlx::query("INSERT INTO sync_ranges (channel_id, start_id, end_id) VALUES (?, ?, ?)")
+            .bind(channel_id)
+            .bind(r.start)
+            .bind(r.end)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    tx.commit().await?;
+
+    // 방금 병합 했으니 겹치는거 하나는 있을 것임
+    let result_range = merged_ranges
+        .into_iter()
+        .find(|r| r.contains(&new_range))
+        .unwrap_or(new_range);
+
+    Ok(result_range)
+}
 
 pub async fn set_channel_caching(
     pool: &SqlitePool,
@@ -89,8 +193,6 @@ pub async fn is_channel_caching_enabled(
         Ok(false)
     }
 }
-
-// Message Helpers
 
 pub async fn insert_message(pool: &SqlitePool, msg: &serenity::Message) -> Result<(), sqlx::Error> {
     let guild_id = match msg.guild_id {
@@ -231,37 +333,6 @@ pub async fn search_messages_fts(
     .await
 }
 
-// like query
-pub async fn search_messages_like(
-    pool: &SqlitePool,
-    guild_id: i64,
-    channel_id: i64,
-    query: &str,
-    limit: u32,
-    offset: u32,
-) -> Result<Vec<SearchResult>, sqlx::Error> {
-    let query_pattern = format!("%{}%", query);
-
-    sqlx::query_as::<_, SearchResult>(
-        r#"
-        SELECT message_id, channel_id, guild_id, author_id, author_name, content, created_at
-        FROM messages
-        WHERE guild_id = ?
-          AND channel_id = ?
-          AND content LIKE ?
-        ORDER BY created_at DESC
-        LIMIT ? OFFSET ?
-        "#,
-    )
-    .bind(guild_id)
-    .bind(channel_id)
-    .bind(query_pattern)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool)
-    .await
-}
-
 pub async fn search_messages_range(
     pool: &SqlitePool,
     guild_id: i64,
@@ -269,6 +340,7 @@ pub async fn search_messages_range(
     query: &str,
     min_id: i64,
     max_id: i64,
+    limit: u32,
 ) -> Result<Vec<SearchResult>, sqlx::Error> {
     let query_pattern = format!("%{}%", query);
 
@@ -281,7 +353,8 @@ pub async fn search_messages_range(
           AND m.message_id >= ? 
           AND m.message_id <= ?
           AND content LIKE ?
-        ORDER BY m.created_at DESC
+        ORDER BY m.message_id DESC
+        LIMIT ?
         "#,
     )
     .bind(guild_id)
@@ -289,23 +362,7 @@ pub async fn search_messages_range(
     .bind(min_id)
     .bind(max_id)
     .bind(query_pattern)
+    .bind(limit)
     .fetch_all(pool)
     .await
-}
-
-pub async fn get_earliest_message_id(
-    pool: &SqlitePool,
-    channel_id: i64,
-) -> Result<Option<i64>, sqlx::Error> {
-    let row = sqlx::query("SELECT MIN(message_id) as min_id FROM messages WHERE channel_id = ?")
-        .bind(channel_id)
-        .fetch_optional(pool)
-        .await?;
-
-    if let Some(row) = row {
-        let id: Option<i64> = row.try_get("min_id")?;
-        Ok(id)
-    } else {
-        Ok(None)
-    }
 }

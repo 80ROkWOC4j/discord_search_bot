@@ -6,10 +6,13 @@ mod database;
 mod event;
 
 use command::{config::config, help::help, search::search};
+use dashmap::DashMap;
+use poise::serenity_prelude::ChannelId;
 use sqlx::SqlitePool;
 
 pub struct Data {
     pub database: SqlitePool,
+    pub live_ranges: DashMap<ChannelId, database::Range>,
 }
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Context<'a> = poise::Context<'a, Data, Error>;
@@ -51,7 +54,10 @@ async fn main() {
                     println!("Production mode: Registering commands globally");
                     poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 }
-                Ok(Data { database })
+                Ok(Data {
+                    database,
+                    live_ranges: DashMap::new(),
+                })
             })
         })
         .build();

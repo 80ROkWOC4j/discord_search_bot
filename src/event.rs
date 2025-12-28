@@ -56,10 +56,38 @@ async fn handle_cache_event(data: &Data, event: &FullEvent) -> Result<(), Error>
     }
 
     // 3. DB 작업 수행
+    // 봇이 꺼져있던 시간 중에 발생한 것 중 새 메세지는 검색 로직에서 lazy하게 처리되나
+    // 그 외 것들은 처리 못함
     match event {
         FullEvent::Message { new_message } => {
             if !new_message.author.bot {
                 database::insert_message(&data.database, new_message).await?;
+
+                // Update Range Logic (Session Continuity)
+                let msg_id = new_message.id.get() as i64;
+                let channel_id = new_message.channel_id;
+
+                let mut range_to_update = database::Range::new(msg_id, msg_id);
+
+                // Check in-memory session range
+                if let Some(mut session_range) = data.live_ranges.get_mut(&channel_id) {
+                    // live는 range 무조건 확장
+                    let new_merged = database::Range::new(session_range.start, msg_id);
+                    *session_range = new_merged;
+                    range_to_update = new_merged;
+                } else {
+                    // New session for this channel
+                    data.live_ranges.insert(channel_id, range_to_update);
+                }
+
+                // Sync to DB
+                database::add_sync_range(
+                    &data.database,
+                    channel_id.get() as i64,
+                    range_to_update.start,
+                    range_to_update.end,
+                )
+                .await?;
             }
         }
         FullEvent::MessageUpdate { event, .. } => {
