@@ -2,34 +2,20 @@ use poise::serenity_prelude as serenity;
 use std::vec;
 
 mod command;
-use command::{help::help, search::search, Data, Error};
+mod database;
+mod event;
 
-async fn event_handler(
-    ctx: &serenity::Context,
-    event: &serenity::FullEvent,
-    _framework: poise::FrameworkContext<'_, Data, Error>,
-    _data: &Data,
-) -> Result<(), Error> {
-    match event {
-        serenity::FullEvent::GuildCreate { guild, is_new } => {
-            let is_new = is_new.unwrap_or(false);
-            if is_new || cfg!(debug_assertions) {
-                println!(
-                    "Registering commands in guild: {} (ID: {}) (new: {})",
-                    guild.name, guild.id, is_new
-                );
-                poise::builtins::register_in_guild(
-                    ctx,
-                    &_framework.options().commands,
-                    guild.id,
-                )
-                .await?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
+use command::{config::config, help::help, search::search};
+use dashmap::DashMap;
+use poise::serenity_prelude::ChannelId;
+use sqlx::SqlitePool;
+
+pub struct Data {
+    pub database: SqlitePool,
+    pub live_ranges: DashMap<ChannelId, database::Range>,
 }
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Context<'a> = poise::Context<'a, Data, Error>;
 
 #[tokio::main]
 async fn main() {
@@ -43,23 +29,35 @@ async fn main() {
         };
         std::env::var(key).expect("missing DISCORD_TOKEN and no token argument provided")
     });
-    let intents = serenity::GatewayIntents::non_privileged();
+
+    // Initialize database
+    let database = database::init_db()
+        .await
+        .expect("Failed to initialize database");
+    println!("Database initialized");
+
+    // Add MESSAGE_CONTENT intent for caching
+    let intents =
+        serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![search(), help()],
+            commands: vec![search(), help(), config()],
             event_handler: |ctx, event, framework, data| {
-                Box::pin(event_handler(ctx, event, framework, data))
+                Box::pin(event::event_handler(ctx, event, framework, data))
             },
             ..Default::default()
         })
-        .setup(|ctx, _ready, framework| {
+        .setup(move |ctx, _ready, framework| {
             Box::pin(async move {
                 if !cfg!(debug_assertions) {
                     println!("Production mode: Registering commands globally");
                     poise::builtins::register_globally(ctx, &framework.options().commands).await?;
                 }
-                Ok(Data {})
+                Ok(Data {
+                    database,
+                    live_ranges: DashMap::new(),
+                })
             })
         })
         .build();

@@ -48,10 +48,18 @@ $ discord_search_bot <YourToken>
 /search text:text_to_search search_until_find:True or False
 ```
 * text : 검색할 텍스트
-* search_until_find : 찾는 검색 결과가 나올 때 까지 과거 채팅 기록을 찾음(느림)
+* search_until_find : 찾는 검색 결과가 나올 때 까지 과거 채팅 기록을 찾음
 
 ## help
 ```
 /help
 ```
 버전 정보와 명령어 설명을 출력합니다. 
+
+## config
+### caching
+```
+/config caching True
+```
+활성화 할 경우 대화 내용을 기록해 검색 속도를 빠르게 합니다.  
+**메세지가 평문으로 저장되니 직접 실행할 경우에만 사용하세요.**
