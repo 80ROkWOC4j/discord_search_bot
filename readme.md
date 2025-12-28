@@ -12,18 +12,53 @@ https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=1
 2. OAuth2 메뉴에서 Scopes는 `bot`, 봇 권한은 `Send Messages`, `Read Message History`, `Use Slash Commands` 체크해서 초대 링크를 만들어 봇을 서버에 초대합니다.  
 3. Bot 메뉴에서 이후에 사용할 토큰을 발급받습니다.
 
-### Docker(권장)
-도커를 통해 직접 봇 서버를 띄우고 사용합니다.
-1. Clone
-    ```shell
-    $ git clone https://github.com/80ROkWOC4j/discord_search_bot.git
-    $ cd discord_search_bot
+### Docker (빌드된 이미지)
+1. 준비: `docker-compose.yml` 파일을 만들고 아래 내용을 붙여넣습니다.
+
+    ```yaml
+    version: '3'
+    services:
+      discord_search_bot:
+        image: ghcr.io/80rokwoc4j/discord_search_bot:latest
+        container_name: dsb
+        environment:
+          - DISCORD_TOKEN=여기에_토큰_입력
+          - DATABASE_URL=sqlite:data/discord_bot.db?mode=rwc
+        volumes:
+          - ./data:/app/data
+        restart: unless-stopped
+        labels:
+          - "com.centurylinklabs.watchtower.scope=discord-search-bot-scope"
+    
+      watchtower:
+        image: containrrr/watchtower
+        profiles:
+          - auto-update
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+        command: --scope discord-search-bot-scope --interval 300 --cleanup
+        restart: unless-stopped
     ```
-2. `docker-compose.yml` 안의 `DISCORD_TOKEN`에 본인의 토큰을 넣습니다. 환경 변수를 통해 토큰이 주입될 것입니다.
-3. 실행
+
+2. 실행
+
+*   일반 실행:
     ```shell
-    $ docker compose up -d --build
+    docker compose up -d
     ```
+*   자동 업데이트 활성화: 5분마다 최신 버전을 확인하고 자동으로 업데이트합니다.
+    ```shell
+    docker compose --profile auto-update up -d
+    ```
+
+### Docker (직접 빌드)
+소스를 수정했거나 직접 빌드하고 싶은 경우
+```shell
+$ git clone https://github.com/80ROkWOC4j/discord_search_bot.git
+$ cd discord_search_bot
+# `docker-compose.yml` 안의 `DISCORD_TOKEN`에 본인의 토큰을 넣습니다.
+$ docker compose up -d --build
+```
 
 ### 바이너리 실행
 항상 봇을 온라인 상태로 유지할 수 없고 검색할 때만 사용할 것이라면 이 방법을 권장합니다.  
