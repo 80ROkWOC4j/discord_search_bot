@@ -5,8 +5,9 @@ use crate::{
 use poise::CreateReply;
 use poise::serenity_prelude::{
     self as serenity, ChannelId, CreateActionRow, CreateButton, CreateEmbed, CreateMessage,
-    EditMessage, GetMessages, Message, MessageId,
+    EditMessage, GetMessages, GuildId, Message, MessageId,
 };
+use sqlx::SqlitePool;
 use std::vec;
 
 pub mod logic;
@@ -74,105 +75,141 @@ pub async fn search(
     if let Some(guild_id) = ctx.guild_id()
         && caching_enabled
     {
-        let mut current_range = match ctx.data().live_ranges.get(&channel_to_search) {
-            Some(r) => *r,
-            None => {
-                // 캐싱 킨 후 아무런 대화가 없어서 live range 갱신이 안된 경우
-                // 봇이 꺼져있어 last sync range와 현재 사이 큰 공백이 있을 수 있음
-                // 따라서 단순하게 현재 id로 처리
-                let now_id = MessageId::new(ctx.id()).get() as i64;
-                database::Range::new(now_id, now_id)
-            }
-        };
-
-        let mut search_cursor = current_range.end;
-        loop {
-            while {
-                let messages_from_db = database::search_messages_range(
-                    pool,
-                    guild_id.get() as i64,
-                    channel_to_search.get() as i64,
-                    &text,
-                    current_range.start,
-                    search_cursor,
-                    DB_PAGE_SIZE,
-                )
-                .await?;
-
-                if !messages_from_db.is_empty() {
-                    send_search_results(&ctx, &dm, &messages_from_db).await?;
-                    search_cursor = messages_from_db.last().unwrap().message_id - 1;
-                } else {
-                    // db에 있는 live range 다 긁어옴. 이제 api 호출로 db 채우고 live range 확장하고 루프 반복
-                    let before_id = MessageId::new(current_range.start as u64);
-
-                    let messages =
-                        get_messages_from_discord_api(&ctx, channel_to_search, &dm, before_id)
-                            .await?;
-
-                    if messages.is_empty() {
-                        send_dm(ctx, "End of channel history.").await?;
-                        return Ok(());
-                    }
-
-                    database::insert_messages(pool, &messages, guild_id.get() as i64).await?;
-
-                    let min_id = messages.last().unwrap().id.get() as i64;
-                    let max_id = messages.first().unwrap().id.get() as i64;
-
-                    let extended_range = database::add_sync_range(
-                        pool,
-                        channel_to_search.get() as i64,
-                        min_id,
-                        max_id,
-                    )
-                    .await?;
-
-                    current_range = database::Range::new(extended_range.start, current_range.end);
-
-                    ctx.data()
-                        .live_ranges
-                        .insert(channel_to_search, current_range);
-                }
-
-                search_until_find && messages_from_db.is_empty()
-            } {}
-
-            if !search_more(ctx).await? {
-                return Ok(());
-            }
-        }
+        cache_search(
+            ctx,
+            text,
+            pool,
+            search_until_find,
+            channel_to_search,
+            &dm,
+            guild_id,
+        )
+        .await
     } else {
-        loop {
-            let mut last_msg_id = last_msg.id;
-            while {
+        non_cache_search(
+            ctx,
+            text,
+            search_until_find,
+            channel_to_search,
+            guild_id,
+            last_msg,
+            &dm,
+        )
+        .await
+    }
+}
+
+async fn cache_search(
+    ctx: Context<'_>,
+    text: String,
+    pool: &SqlitePool,
+    search_until_find: bool,
+    channel_to_search: ChannelId,
+    dm: &Message,
+    guild_id: GuildId,
+) -> Result<(), Error> {
+    let mut current_range = match ctx.data().live_ranges.get(&channel_to_search) {
+        Some(r) => *r,
+        None => {
+            // 캐싱 킨 후 아무런 대화가 없어서 live range 갱신이 안된 경우
+            // 봇이 꺼져있어 last sync range와 현재 사이 큰 공백이 있을 수 있음
+            // 따라서 단순하게 현재 id로 처리
+            let now_id = MessageId::new(ctx.id()).get() as i64;
+            database::Range::new(now_id, now_id)
+        }
+    };
+
+    let mut search_cursor = current_range.end;
+    loop {
+        while {
+            let messages_from_db = database::search_messages_range(
+                pool,
+                guild_id.get() as i64,
+                channel_to_search.get() as i64,
+                &text,
+                current_range.start,
+                search_cursor,
+                DB_PAGE_SIZE,
+            )
+            .await?;
+
+            if !messages_from_db.is_empty() {
+                send_search_results(&ctx, &dm, &messages_from_db).await?;
+                search_cursor = messages_from_db.last().unwrap().message_id - 1;
+            } else {
+                // db에 있는 live range 다 긁어옴. 이제 api 호출로 db 채우고 live range 확장하고 루프 반복
+                let before_id = MessageId::new(current_range.start as u64);
+
                 let messages =
-                    get_messages_from_discord_api(&ctx, channel_to_search, &dm, last_msg_id)
-                        .await?;
+                    get_messages_from_discord_api(&ctx, channel_to_search, &dm, before_id).await?;
 
                 if messages.is_empty() {
-                    send_dm(ctx, "end of channel, no more chat to find!").await?;
+                    send_dm(ctx, "End of channel history.").await?;
                     return Ok(());
                 }
 
-                last_msg_id = messages.last().unwrap().id;
+                database::insert_messages(pool, &messages, guild_id.get() as i64).await?;
 
-                let results = messages
-                    .iter()
-                    .filter(|msg| msg.content.contains(&text))
-                    .map(|msg| SearchResult::from_message(msg, guild_id))
-                    .collect::<Vec<_>>();
+                let min_id = messages.last().unwrap().id.get() as i64;
+                let max_id = messages.first().unwrap().id.get() as i64;
 
-                // send result
-                send_search_results(&ctx, &dm, &results).await?;
+                let extended_range =
+                    database::add_sync_range(pool, channel_to_search.get() as i64, min_id, max_id)
+                        .await?;
 
-                search_until_find && results.is_empty()
-            } {}
+                current_range = database::Range::new(extended_range.start, current_range.end);
 
-            if !search_more(ctx).await? {
-                return Ok(());
-            };
+                ctx.data()
+                    .live_ranges
+                    .insert(channel_to_search, current_range);
+            }
+
+            search_until_find && messages_from_db.is_empty()
+        } {}
+
+        if !search_more(ctx).await? {
+            return Ok(());
         }
+    }
+}
+
+async fn non_cache_search(
+    ctx: Context<'_>,
+    text: String,
+    search_until_find: bool,
+    channel_to_search: ChannelId,
+    guild_id: i64,
+    last_msg: Message,
+    dm: &Message,
+) -> Result<(), Error> {
+    loop {
+        let mut last_msg_id = last_msg.id;
+        while {
+            let messages =
+                get_messages_from_discord_api(&ctx, channel_to_search, &dm, last_msg_id).await?;
+
+            if messages.is_empty() {
+                send_dm(ctx, "end of channel, no more chat to find!").await?;
+                return Ok(());
+            }
+
+            last_msg_id = messages.last().unwrap().id;
+
+            let results = messages
+                .iter()
+                .filter(|msg| msg.content.contains(&text))
+                .map(|msg| SearchResult::from_message(msg, guild_id))
+                .collect::<Vec<_>>();
+
+            // send result
+            send_search_results(&ctx, &dm, &results).await?;
+
+            search_until_find && results.is_empty()
+        } {}
+
+        if !search_more(ctx).await? {
+            return Ok(());
+        };
     }
 }
 
