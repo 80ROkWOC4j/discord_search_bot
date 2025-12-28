@@ -37,9 +37,10 @@ impl SearchResult {
 }
 
 pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
-    let database_url = "sqlite://discord_bot.db?mode=rwc"; // rwc: read, write, create
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "sqlite://discord_bot.db?mode=rwc".to_string());
 
-    let options = SqliteConnectOptions::from_str(database_url)?.create_if_missing(true);
+    let options = SqliteConnectOptions::from_str(&database_url)?.create_if_missing(true);
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)

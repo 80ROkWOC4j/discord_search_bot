@@ -1,11 +1,20 @@
 version: '3'
 services:
   discord_search_bot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: discord_search_bot
+    image: ghcr.io/80rokwoc4j/discord_search_bot:latest
     container_name: dsb
     environment:
       - DISCORD_TOKEN=$DISCORD_TOKEN
+      - DATABASE_URL=sqlite:///app/data/discord_bot.db?mode=rwc
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.scope=discord-search-bot-scope"
+
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --scope discord-search-bot-scope --interval 300
     restart: unless-stopped
