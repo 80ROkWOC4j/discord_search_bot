@@ -144,15 +144,18 @@ pub async fn search(
         }
     } else {
         loop {
+            let mut last_msg_id = last_msg.id;
             while {
                 let messages =
-                    get_messages_from_discord_api(&ctx, channel_to_search, &dm, last_msg.id)
+                    get_messages_from_discord_api(&ctx, channel_to_search, &dm, last_msg_id)
                         .await?;
 
                 if messages.is_empty() {
                     send_dm(ctx, "end of channel, no more chat to find!").await?;
                     return Ok(());
                 }
+
+                last_msg_id = messages.last().unwrap().id;
 
                 let results = messages
                     .iter()
