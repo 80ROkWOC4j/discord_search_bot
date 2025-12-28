@@ -3,9 +3,10 @@
 # 실행 방법
 
 ## 봇 초대
-기본적으로 작동하고 있는 봇을 초대합니다.  
+작동하고 있는 봇을 초대합니다.  
 https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=19327372288&scope=bot  
-이 봇은 아무런 데이터도 수집하지 않지만, **프라이버시**(와 저의 서버비)**를 위해 직접 봇을 운영하는 것을 권장합니다.**
+**프라이버시**(와 저의 서버비)**를 위해 직접 봇을 운영하는 것을 권장합니다.**  
+최초 봇 초대 시, 명령어 등록 처리 과정에서 초대한 채널 이름을 로깅합니다. 
 
 ## 직접 실행
 1. https://discord.com/developers/applications 에서 새 애플리케이션을 만듭니다.  
@@ -90,6 +91,12 @@ $ discord_search_bot <YourToken>
 /help
 ```
 버전 정보와 명령어 설명을 출력합니다. 
+
+## version
+```
+/version
+```
+현재 봇의 버전 정보와 최신 여부를 확인합니다.
 
 ## config
 ### caching
