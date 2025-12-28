@@ -8,7 +8,8 @@ pub struct SearchResult {
     pub message_id: i64,
     pub channel_id: i64,
     pub guild_id: i64,
-    pub _author_id: i64,
+    #[allow(unused)]
+    pub author_id: i64,
     pub author_name: String,
     pub content: String,
     pub created_at: i64,
@@ -28,7 +29,7 @@ impl SearchResult {
             message_id: msg.id.get() as i64,
             channel_id: msg.channel_id.get() as i64,
             guild_id,
-            _author_id: msg.author.id.get() as i64,
+            author_id: msg.author.id.get() as i64,
             author_name: msg.author.name.clone(),
             content: msg.content.clone(),
             created_at: msg.timestamp.timestamp(),
