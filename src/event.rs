@@ -11,7 +11,7 @@ pub async fn event_handler(
     register_command(ctx, event, &framework).await?;
 
     if let Err(e) = handle_cache_event(data, event).await {
-        println!("Cache error: {e:?}");
+        tracing::error!("Cache error: {e:?}");
     }
 
     Ok(())
@@ -25,7 +25,7 @@ async fn register_command(
     if let FullEvent::GuildCreate { guild, is_new } = event {
         let is_new = is_new.unwrap_or(false);
         if is_new || cfg!(debug_assertions) {
-            println!(
+            tracing::info!(
                 "Registering commands in guild: {} (ID: {}) (new: {})",
                 guild.name, guild.id, is_new
             );
