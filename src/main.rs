@@ -9,6 +9,7 @@ use command::{config::config, help::help, search::search};
 use dashmap::DashMap;
 use poise::serenity_prelude::ChannelId;
 use sqlx::SqlitePool;
+use crate::command::version::version;
 
 pub struct Data {
     pub database: SqlitePool,
@@ -42,7 +43,7 @@ async fn main() {
 
     let framework = poise::Framework::builder()
         .options(poise::FrameworkOptions {
-            commands: vec![search(), help(), config()],
+            commands: vec![search(), help(), config(), version()],
             event_handler: |ctx, event, framework, data| {
                 Box::pin(event::event_handler(ctx, event, framework, data))
             },
