@@ -11,6 +11,7 @@ services:
       - DATABASE_URL=sqlite:data/discord_bot.db?mode=rwc
     volumes:
       - ./data:/app/data
+      - ./logs:/app/logs
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.scope=discord-search-bot-scope"

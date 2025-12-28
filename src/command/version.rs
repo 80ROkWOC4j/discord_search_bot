@@ -35,7 +35,7 @@ pub(super) async fn version(ctx: Context<'_>) -> Result<(), Error> {
         }
         Err(e) => {
             // 실패해도 현재 버전은 출력
-            eprintln!("Failed to check GHCR: {}", e);
+            tracing::error!("Failed to check GHCR: {}", e);
             response.push_str(&format!("\n(최신버전 확인 실패: {})", e));
         }
     }
