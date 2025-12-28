@@ -24,7 +24,7 @@ https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=1
         container_name: dsb
         environment:
           - DISCORD_TOKEN=여기에_토큰_입력
-          - DATABASE_URL=sqlite:data/discord_bot.db?mode=rwc
+          - DATABASE_URL=sqlite:///app/data/discord_bot.db?mode=rwc
         volumes:
           - ./data:/app/data
         restart: unless-stopped
