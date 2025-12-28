@@ -2,13 +2,13 @@ use crate::{Context, Error};
 
 /// 서치봇 설정을 관리합니다.
 #[poise::command(slash_command, subcommands("caching"), guild_only)]
-pub async fn config(_ctx: Context<'_>) -> Result<(), Error> {
+pub(super) async fn config(_ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
 /// 이 채널에서 메세지 캐싱을 활성화 합니다. 서버 관리 권한 필요.
 #[poise::command(slash_command, required_permissions = "MANAGE_GUILD")]
-pub async fn caching(
+pub(super) async fn caching(
     ctx: Context<'_>,
     #[description = "Enable or disable caching"] enable: bool,
 ) -> Result<(), Error> {

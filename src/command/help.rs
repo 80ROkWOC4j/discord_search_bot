@@ -2,7 +2,7 @@ use crate::{Context, Error};
 
 /// Show help information
 #[poise::command(slash_command, prefix_command)]
-pub async fn help(
+pub(super) async fn help(
     ctx: Context<'_>,
     #[description = "Specific command to show help about"] command: Option<String>,
 ) -> Result<(), Error> {

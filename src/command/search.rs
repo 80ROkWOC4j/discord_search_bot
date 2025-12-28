@@ -1,4 +1,4 @@
-pub mod logic;
+mod logic;
 #[cfg(test)]
 mod tests;
 
@@ -21,7 +21,7 @@ const DB_PAGE_SIZE: u32 = 10; // 메세지 하나에 최대 10개 결과 표시
 
 /// 메세지를 검색합니다
 #[poise::command(slash_command, prefix_command)]
-pub async fn search(
+pub(super) async fn search(
     ctx: Context<'_>,
     #[description = "검색할 단어"] text: String,
     #[description = "결과물을 찾을 때 까지 검색"] search_until_find: Option<bool>,
