@@ -1,7 +1,12 @@
+pub mod logic;
+#[cfg(test)]
+mod tests;
+
 use crate::{
     Context, Error,
     database::{self, SearchResult},
 };
+use logic::{substr, timestamp_to_readable};
 use poise::CreateReply;
 use poise::serenity_prelude::{
     self as serenity, ChannelId, CreateActionRow, CreateButton, CreateEmbed, CreateMessage,
@@ -9,13 +14,6 @@ use poise::serenity_prelude::{
 };
 use sqlx::SqlitePool;
 use std::vec;
-
-pub mod logic;
-
-#[cfg(test)]
-mod tests;
-
-use logic::{substr, timestamp_to_readable};
 
 const SEARCH_MESSAGE_LIMIT: usize = 100; // discord api limit
 const SEARCH_COUNT: usize = 10; // search 10 times, so search latest 1000 messages
@@ -81,7 +79,7 @@ pub async fn search(
             pool,
             search_until_find,
             channel_to_search,
-            &dm,
+            dm,
             guild_id,
         )
         .await
@@ -93,7 +91,7 @@ pub async fn search(
             channel_to_search,
             guild_id,
             last_msg,
-            &dm,
+            dm,
         )
         .await
     }
@@ -105,7 +103,7 @@ async fn cache_search(
     pool: &SqlitePool,
     search_until_find: bool,
     channel_to_search: ChannelId,
-    dm: &Message,
+    dm: Message,
     guild_id: GuildId,
 ) -> Result<(), Error> {
     let mut current_range = match ctx.data().live_ranges.get(&channel_to_search) {
@@ -180,7 +178,7 @@ async fn non_cache_search(
     channel_to_search: ChannelId,
     guild_id: i64,
     last_msg: Message,
-    dm: &Message,
+    dm: Message,
 ) -> Result<(), Error> {
     loop {
         let mut last_msg_id = last_msg.id;
