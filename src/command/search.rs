@@ -19,6 +19,8 @@ const SEARCH_MESSAGE_LIMIT: usize = 100; // discord api limit
 const SEARCH_COUNT: usize = 10; // search 10 times, so search latest 1000 messages
 const DB_PAGE_SIZE: u32 = 10; // 메세지 하나에 최대 10개 결과 표시
 
+const END_OF_CHANNEL: &str = "채널에 모든 메세지를 검색했거나, 잦은 검색 호출로 discord api 호출 제한이 걸렸습니다!";
+
 /// 메세지를 검색합니다
 #[poise::command(slash_command, prefix_command)]
 pub(super) async fn search(
@@ -142,7 +144,7 @@ async fn cache_search(
                     get_messages_from_discord_api(&ctx, channel_to_search, &dm, before_id).await?;
 
                 if messages.is_empty() {
-                    send_dm(ctx, "End of channel history.").await?;
+                    send_dm(ctx, END_OF_CHANNEL).await?;
                     return Ok(());
                 }
 
@@ -180,14 +182,14 @@ async fn non_cache_search(
     last_msg: Message,
     dm: Message,
 ) -> Result<(), Error> {
+    let mut last_msg_id = last_msg.id;
     loop {
-        let mut last_msg_id = last_msg.id;
         while {
             let messages =
                 get_messages_from_discord_api(&ctx, channel_to_search, &dm, last_msg_id).await?;
 
             if messages.is_empty() {
-                send_dm(ctx, "end of channel, no more chat to find!").await?;
+                send_dm(ctx, END_OF_CHANNEL).await?;
                 return Ok(());
             }
 
@@ -260,11 +262,13 @@ async fn send_search_results(
             let timestamp =
                 serenity::Timestamp::from_unix_timestamp(msg.created_at).unwrap_or_default();
             let title = format!(
-                "{}\t{}",
+                "{}\t{}\t{}",
                 &msg.author_name,
-                &timestamp_to_readable(timestamp)
+                &timestamp_to_readable(timestamp),
+                msg.link(),
             );
-            let content = format!("[{}]({})\n", substr(&msg.content, 50), msg.link());
+            let first_3_lines = msg.content.lines().take(3).collect::<Vec<_>>().join("\n");
+            let content = format!("{}", substr(&first_3_lines, 50));
             msg_builder = msg_builder
                 .add_embed(CreateEmbed::new().field(&title, &content, false))
                 .reference_message(dm);
