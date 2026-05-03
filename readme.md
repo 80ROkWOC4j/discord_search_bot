@@ -25,19 +25,9 @@ https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=1
         environment:
           - DISCORD_TOKEN=여기에_토큰_입력
           - DATABASE_URL=sqlite:///app/data/discord_bot.db?mode=rwc
+          - VERSION_CHECK_INTERVAL_SECS=86400
         volumes:
           - ./data:/app/data
-        restart: unless-stopped
-        labels:
-          - "com.centurylinklabs.watchtower.scope=discord-search-bot-scope"
-    
-      watchtower:
-        image: containrrr/watchtower
-        profiles:
-          - auto-update
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
-        command: --scope discord-search-bot-scope --interval 300 --cleanup
         restart: unless-stopped
     ```
 
@@ -47,10 +37,7 @@ https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=1
     ```shell
     docker compose up -d
     ```
-*   자동 업데이트 활성화: 5분마다 최신 버전을 확인하고 자동으로 업데이트합니다.
-    ```shell
-    docker compose --profile auto-update up -d
-    ```
+`VERSION_CHECK_INTERVAL_SECS`는 새 버전 확인 주기(초)입니다.
 
 ### Docker (직접 빌드)
 소스를 수정했거나 직접 빌드하고 싶은 경우
@@ -97,6 +84,12 @@ $ discord_search_bot <YourToken>
 /version
 ```
 현재 봇의 버전 정보와 최신 여부를 확인합니다.
+
+## notify_version
+```
+/notify_version enable:true or false
+```
+새 버전이 감지되면 DM으로 알림을 받습니다.
 
 ## config
 ### caching
