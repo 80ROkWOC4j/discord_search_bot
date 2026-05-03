@@ -196,6 +196,62 @@ pub async fn is_channel_caching_enabled(
     }
 }
 
+pub async fn set_version_subscription(
+    pool: &SqlitePool,
+    user_id: u64,
+    enabled: bool,
+) -> Result<(), sqlx::Error> {
+    let enabled_value = if enabled { 1 } else { 0 };
+    sqlx::query(
+        "INSERT INTO version_subscriptions (user_id, enabled) VALUES (?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET enabled = excluded.enabled",
+    )
+    .bind(user_id as i64)
+    .bind(enabled_value)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn list_version_subscribers(pool: &SqlitePool) -> Result<Vec<i64>, sqlx::Error> {
+    let rows = sqlx::query("SELECT user_id FROM version_subscriptions WHERE enabled = 1")
+        .fetch_all(pool)
+        .await?;
+    rows.into_iter().map(|row| row.try_get("user_id")).collect()
+}
+
+pub async fn mark_version_notified(
+    pool: &SqlitePool,
+    user_id: u64,
+    latest_version: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE version_subscriptions SET last_notified_version = ? WHERE user_id = ?")
+        .bind(latest_version)
+        .bind(user_id as i64)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn should_notify_version(
+    pool: &SqlitePool,
+    user_id: u64,
+    latest_version: &str,
+) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query("SELECT last_notified_version FROM version_subscriptions WHERE user_id = ? AND enabled = 1")
+        .bind(user_id as i64)
+        .fetch_optional(pool)
+        .await?;
+
+    match row {
+        Some(r) => {
+            let last: Option<String> = r.try_get("last_notified_version")?;
+            Ok(last.as_deref() != Some(latest_version))
+        }
+        None => Ok(false),
+    }
+}
+
 pub async fn insert_message(pool: &SqlitePool, msg: &serenity::Message) -> Result<(), sqlx::Error> {
     let guild_id = match msg.guild_id {
         Some(id) => id.get() as i64,

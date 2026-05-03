@@ -44,7 +44,7 @@ pub(super) async fn version(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-async fn check_latest_version() -> Result<Option<String>, Error> {
+pub(crate) async fn check_latest_version() -> Result<Option<String>, Error> {
     let client = reqwest::Client::new();
 
     // 1. 인증 토큰 획득 (Public 이미지라도 토큰 필요)
