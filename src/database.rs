@@ -1,7 +1,13 @@
 use poise::serenity_prelude as serenity;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+const DB_ENCRYPTION_KEY_PATHS: &[&str] = &[
+    "/run/secrets/db_key", // Docker secret mount
+    "secrets/db_key",      // Native local run
+];
 
 #[derive(sqlx::FromRow, Debug)]
 pub struct SearchResult {
@@ -41,7 +47,13 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite://discord_bot.db?mode=rwc".to_string());
 
-    let options = SqliteConnectOptions::from_str(&database_url)?.create_if_missing(true);
+    let mut options = SqliteConnectOptions::from_str(&database_url)?.create_if_missing(true);
+
+    if let Some(key) = database_encryption_key()? {
+        let encrypted_filename = encrypted_database_filename(options.get_filename());
+        options = options.filename(encrypted_filename);
+        options = options.pragma("key", sql_string_literal(&key));
+    }
 
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
@@ -52,6 +64,77 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     sqlx::migrate!("./migrations").run(&pool).await?;
 
     Ok(pool)
+}
+
+fn database_encryption_key() -> Result<Option<String>, sqlx::Error> {
+    for path in DB_ENCRYPTION_KEY_PATHS.iter().map(Path::new) {
+        if path.exists() {
+            let key = std::fs::read_to_string(path)?;
+            return validate_encryption_key(key).map(Some);
+        }
+    }
+
+    Ok(None)
+}
+
+fn encrypted_database_filename(filename: &Path) -> PathBuf {
+    if filename == Path::new(":memory:") {
+        return filename.to_path_buf();
+    }
+
+    let encrypted_name = match (
+        filename.file_stem().and_then(|s| s.to_str()),
+        filename.extension().and_then(|s| s.to_str()),
+    ) {
+        (Some(stem), Some(extension)) => format!("{stem}.sqlcipher.{extension}"),
+        (Some(stem), None) => format!("{stem}.sqlcipher"),
+        _ => "discord_bot.sqlcipher.db".to_string(),
+    };
+
+    filename.with_file_name(encrypted_name)
+}
+
+fn validate_encryption_key(key: String) -> Result<String, sqlx::Error> {
+    let key = key.trim_end_matches(&['\r', '\n'][..]).to_owned();
+
+    if key.is_empty() {
+        return Err(config_error("database encryption key is empty"));
+    }
+
+    Ok(key)
+}
+
+fn sql_string_literal(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+fn config_error(message: &'static str) -> sqlx::Error {
+    sqlx::Error::Configuration(Box::new(std::io::Error::new(
+        std::io::ErrorKind::InvalidInput,
+        message,
+    )))
+}
+
+#[cfg(test)]
+mod encryption_tests {
+    use super::encrypted_database_filename;
+    use std::path::Path;
+
+    #[test]
+    fn encrypted_database_filename_keeps_plaintext_db_separate() {
+        assert_eq!(
+            encrypted_database_filename(Path::new("/app/data/discord_bot.db")),
+            Path::new("/app/data/discord_bot.sqlcipher.db")
+        );
+    }
+
+    #[test]
+    fn encrypted_database_filename_keeps_memory_databases_in_memory() {
+        assert_eq!(
+            encrypted_database_filename(Path::new(":memory:")),
+            Path::new(":memory:")
+        );
+    }
 }
 
 use std::cmp::{max, min};

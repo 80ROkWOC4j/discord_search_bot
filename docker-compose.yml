@@ -10,7 +10,13 @@ services:
       - DISCORD_TOKEN=$DISCORD_TOKEN
       - DATABASE_URL=sqlite:///app/data/discord_bot.db?mode=rwc
       - VERSION_CHECK_INTERVAL_SECS=86400
+    secrets:
+      - db_key
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
     restart: unless-stopped
+
+secrets:
+  db_key:
+    file: ./secrets/db_key

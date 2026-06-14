@@ -1,9 +1,12 @@
 target
 Cargo.lock
 discord_bot.db
+discord_bot.sqlcipher.db
 
 .idea
+.history
 
 GEMINI.md
 plan
 logs/
+secrets/

@@ -26,12 +26,28 @@ https://discord.com/oauth2/authorize?client_id=1032354931673407620&permissions=1
           - DISCORD_TOKEN=여기에_토큰_입력
           - DATABASE_URL=sqlite:///app/data/discord_bot.db?mode=rwc
           - VERSION_CHECK_INTERVAL_SECS=86400
+        secrets:
+          - db_key
         volumes:
           - ./data:/app/data
         restart: unless-stopped
+
+    secrets:
+      db_key:
+        file: ./secrets/db_key
     ```
 
-2. 실행
+2. (Optional) DB 암호화 키 파일을 만듭니다.
+
+    ```shell
+    mkdir -p secrets
+    openssl rand -base64 32 > secrets/db_key
+    ```
+
+  `/run/secrets/db_key` 또는 `secrets/db_key` 파일이 있으면 SQLCipher로 SQLite DB를 암호화합니다. 파일이 없으면 평문 SQLite DB를 사용합니다.
+  키 파일이 있으면 `DATABASE_URL`의 DB 파일명에 `.sqlcipher`를 붙인 별도 파일을 사용합니다. 예를 들어 `discord_bot.db`는 `discord_bot.sqlcipher.db`로 열립니다.
+
+3. 실행
 
 *   일반 실행:
     ```shell
@@ -58,6 +74,7 @@ $ discord_search_bot <YourToken>
 
 ### 디버깅
 디버깅 빌드에서는 `DISCORD_TOKEN_DEBUG`를 사용합니다. 개발 시 자세한 내용은 코드 참고.
+DB 암호화를 테스트하려면 `secrets/db_key` 파일을 만듭니다.
 
 # 사용 전 설정
 1. 준비된 봇을 서버로 초대합니다.
@@ -97,4 +114,4 @@ $ discord_search_bot <YourToken>
 /config caching True
 ```
 활성화 할 경우 대화 내용을 기록해 검색 속도를 빠르게 합니다.  
-**메세지가 평문으로 저장되니 직접 실행할 경우에만 사용하세요.**
+SQLCipher 키를 설정하지 않으면 메세지가 평문으로 저장되니 직접 실행할 경우에만 사용하세요.
