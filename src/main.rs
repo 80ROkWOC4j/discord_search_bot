@@ -81,6 +81,10 @@ async fn main() {
                         .ok()
                         .and_then(|v| v.parse::<u64>().ok())
                         .unwrap_or(86_400);
+                    if interval_secs == 0 {
+                        tracing::info!("Version polling disabled");
+                        return;
+                    }
                     let mut ticker = tokio::time::interval(Duration::from_secs(interval_secs));
                     loop {
                         ticker.tick().await;

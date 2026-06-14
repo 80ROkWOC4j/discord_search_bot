@@ -1,0 +1,31 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Discord Search Bot",
+  "version": "0.1.0",
+  "identifier": "io.github.discord-search-bot.gui",
+  "build": {
+    "beforeDevCommand": "cargo build --release --manifest-path ../Cargo.toml",
+    "beforeBuildCommand": "cargo build --release --manifest-path ../Cargo.toml",
+    "frontendDist": "../web"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Discord Search Bot",
+        "width": 980,
+        "height": 680,
+        "minWidth": 980,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["icons/icon.ico"],
+    "targets": ["nsis"]
+  }
+}

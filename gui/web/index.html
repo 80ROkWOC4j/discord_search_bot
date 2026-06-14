@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Discord Search Bot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div>
+          <h1>Discord Search Bot</h1>
+          <p>Windows launcher</p>
+        </div>
+        <div class="status" id="status">대기 중</div>
+      </section>
+
+      <section class="layout">
+        <form class="panel settings" id="settings-form">
+          <div class="section-title">
+            <h2>설정</h2>
+            <button type="button" id="open-portal">Developer Portal</button>
+          </div>
+
+          <label>
+            <span>봇 토큰</span>
+            <div class="token-field">
+              <input id="token" type="password" autocomplete="off" spellcheck="false" />
+              <button type="button" id="validate-token">확인</button>
+              <button type="button" id="toggle-token">보기</button>
+            </div>
+          </label>
+
+          <div class="form-section">
+            <h3>데이터</h3>
+            <div class="actions">
+              <button type="button" id="open-data-dir">폴더 열기</button>
+              <button type="button" id="clear-local-data">로컬 데이터 삭제</button>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3>실행</h3>
+            <div class="actions primary">
+              <button type="button" id="invite-bot">초대 링크</button>
+              <button type="button" id="toggle-bot">시작</button>
+            </div>
+          </div>
+        </form>
+
+        <section class="panel logs">
+          <div class="section-title log-title">
+            <h2>로그</h2>
+          </div>
+          <pre id="log-output"></pre>
+        </section>
+      </section>
+    </main>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
