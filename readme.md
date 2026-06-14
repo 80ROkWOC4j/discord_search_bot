@@ -1,5 +1,7 @@
 한글 검색을 제대로 못하는 디스코드 기본 검색 기능과 달리 이 봇은 키워드를 포함한 모든 메세지를 검색합니다.
 
+<img width="500" height="363" alt="search_demo" src="https://github.com/user-attachments/assets/f55a8c6d-216a-4e52-b6c5-fa86c86995ad" />
+
 # 실행 방법
 
 ## 봇 초대
