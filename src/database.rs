@@ -440,6 +440,17 @@ pub async fn delete_channel_messages(
     Ok(())
 }
 
+pub async fn delete_channel_sync_ranges(
+    pool: &SqlitePool,
+    channel_id: serenity::ChannelId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM sync_ranges WHERE channel_id = ?")
+        .bind(channel_id.get() as i64)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 // fts5 search
 #[allow(unused)]
 pub async fn search_messages_fts(

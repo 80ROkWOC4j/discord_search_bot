@@ -23,6 +23,7 @@ pub(super) async fn caching(
 
     if !enable {
         crate::database::delete_channel_messages(pool, ctx.channel_id()).await?;
+        crate::database::delete_channel_sync_ranges(pool, ctx.channel_id()).await?;
     }
 
     let status = if enable {
