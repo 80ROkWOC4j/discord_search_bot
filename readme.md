@@ -76,13 +76,15 @@ $ discord_search_bot <YourToken>
 ```
 
 ### Windows GUI
-Windows 사용자는 최신 릴리즈에서 `discord_search_bot-gui-windows-amd64.exe`를 받아 실행하면 됩니다. 설치 없이 실행할 수 있는 단일 파일입니다.
+<img width="737" height="534" alt="스크린샷 2026-06-15 013727" src="https://github.com/user-attachments/assets/aa2a6c18-0420-47e9-a336-5e0594d4b827" />
 
-1. `Developer Portal` 버튼으로 디스코드 개발자 페이지를 열고 봇 토큰을 준비합니다.
-2. 봇 토큰을 입력하고 `확인`을 누릅니다.
+Windows 사용자는 최신 릴리즈에서 `discord_search_bot-gui-windows-amd64.exe`를 받아 실행하면 됩니다.
+
+1. 위에 있는 설명처럼 봇이 준비되어야 합니다. `Developer Portal` 버튼으로 디스코드 개발자 페이지를 열고 봇 토큰을 준비합니다.
+2. 봇 토큰을 입력합니다. `확인` 버튼을 눌러서 유효한 봇인지 확인할 수 있습니다.
 3. `초대 링크`로 봇을 서버에 초대한 뒤 `시작`을 누릅니다.
 
-토큰과 봇 정보는 자동 저장됩니다. `로컬 데이터 삭제`를 누르면 저장된 설정, 로그, DB, 암호화 키가 삭제됩니다. GUI로 실행한 봇의 버전 확인은 디스코드에서 `/version` 명령어로 할 수 있습니다.
+`로컬 데이터 삭제`를 누르면 저장된 설정, 로그, DB, 암호화 키가 삭제됩니다. GUI로 실행한 봇의 버전 확인은 디스코드에서 `/version` 명령어로 할 수 있습니다.
 
 ### 디버깅
 디버깅 빌드에서는 `DISCORD_TOKEN_DEBUG`를 사용합니다. 개발 시 자세한 내용은 코드 참고.
@@ -109,6 +111,7 @@ DB 암호화를 테스트하려면 `secrets/db_key` 파일을 만듭니다.
 버전 정보와 명령어 설명을 출력합니다. 
 
 ## version
+
 ```
 /version
 ```
